@@ -1,7 +1,11 @@
-#[derive(Debug)]
+use std::collections::HashMap;
+use std::vec;
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 pub enum AddressingMode {
     Immediate,
+    Implied,
     ZeroPage,
     ZeroPage_X,
     ZeroPage_Y,
@@ -13,23 +17,72 @@ pub enum AddressingMode {
     NoneAddressing,
 }
 
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub enum Mnemonic {
+    LDA,
+    TAX,
+    INX,
+    STA,
+    BRK,
+}
+
+#[derive(Debug, Clone, Copy, PartialEq, Eq)]
+pub struct OpCode {
+    pub code: u8,
+    pub mnemonic: Mnemonic,
+    pub len: u8,
+    pub cycles: u8,
+    pub mode: AddressingMode,
+}
+
+impl OpCode {
+    fn new(code: u8, mnemonic: Mnemonic, len: u8, cycles: u8, mode: AddressingMode) -> Self {
+        OpCode {
+            code,
+            mnemonic,
+            len,
+            cycles,
+            mode,
+        }
+    }
+}
+
+pub fn get_opcodes() -> Vec<OpCode> {
+    vec![
+        OpCode::new(0xA9, Mnemonic::LDA, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xA5, Mnemonic::LDA, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xAD, Mnemonic::LDA, 3, 4, AddressingMode::Absolute),
+        OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Immediate),
+        OpCode::new(0x00, Mnemonic::BRK, 1, 7, AddressingMode::Implied),
+        OpCode::new(0xE8, Mnemonic::INX, 1, 2, AddressingMode::Implied),
+        OpCode::new(0x85, Mnemonic::STA, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x95, Mnemonic::STA, 2, 4, AddressingMode::ZeroPage_X),
+    ]
+}
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
     pub status: u8,
     pub program_counter: u16,
+    pub instructions: HashMap<u8, OpCode>,
     memory: [u8; 0xFFFF],
 }
 
 impl CPU {
     pub fn new() -> Self {
+        let mut instructions = HashMap::new();
+        for op in get_opcodes() {
+            instructions.insert(op.code, op);
+        }
         CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
             status: 0,
             program_counter: 0,
+            instructions: instructions,
             memory: [0; 65535],
         }
     }
@@ -37,6 +90,7 @@ impl CPU {
     fn get_operand_address(&self, mode: &AddressingMode) -> u16 {
         match mode {
             AddressingMode::Immediate => self.program_counter,
+            AddressingMode::Implied => self.program_counter,
             AddressingMode::ZeroPage => self.mem_read(self.program_counter) as u16,
             AddressingMode::Absolute => self.mem_read_u16(self.program_counter),
             AddressingMode::ZeroPage_X => {
@@ -165,35 +219,25 @@ impl CPU {
 
     pub fn run(&mut self) {
         loop {
-            let opscode = self.mem_read(self.program_counter);
+            let code = self.mem_read(self.program_counter);
             self.program_counter += 1;
 
-            match opscode {
-                0xA9 => {
-                    self.lda(&AddressingMode::Immediate);
-                    self.program_counter += 1;
+            let opcode = match self.instructions.get(&code) {
+                Some(op) => *op,
+                None => {
+                    todo!();
                 }
-                0xA5 => {
-                    self.lda(&AddressingMode::ZeroPage);
-                    self.program_counter += 1;
-                }
-                0xAD => {
-                    self.lda(&AddressingMode::Absolute);
-                    self.program_counter += 2;
-                }
-                0xAA => self.tax(),
-                0x00 => return,
-                0xe8 => self.inx(),
-                0x85 => {
-                    self.sta(&AddressingMode::ZeroPage);
-                    self.program_counter += 1;
-                }
-                0x95 => {
-                    self.sta(&AddressingMode::ZeroPage_X);
-                    self.program_counter += 1;
-                }
-                _ => todo!(),
+            };
+
+            match opcode.mnemonic {
+                Mnemonic::LDA => self.lda(&opcode.mode),
+                Mnemonic::TAX => self.tax(),
+                Mnemonic::INX => self.inx(),
+                Mnemonic::STA => self.sta(&opcode.mode),
+                Mnemonic::BRK => return,
             }
+
+            self.program_counter += (opcode.len - 1) as u16;
         }
     }
 }
