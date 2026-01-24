@@ -19,6 +19,7 @@ pub enum AddressingMode {
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mnemonic {
+    ADC,
     LDA,
     TAX,
     INX,
@@ -49,6 +50,14 @@ impl OpCode {
 
 pub fn get_opcodes() -> Vec<OpCode> {
     vec![
+        OpCode::new(0x69, Mnemonic::ADC, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x65, Mnemonic::ADC, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x75, Mnemonic::ADC, 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x6D, Mnemonic::ADC, 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x7D, Mnemonic::ADC, 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0x79, Mnemonic::ADC, 3, 4, AddressingMode::Absolute_Y),
+        OpCode::new(0x61, Mnemonic::ADC, 2, 6, AddressingMode::Indirect_X),
+        OpCode::new(0x71, Mnemonic::ADC, 2, 5, AddressingMode::Indirect_Y),
         OpCode::new(0xA9, Mnemonic::LDA, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xA5, Mnemonic::LDA, 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xAD, Mnemonic::LDA, 3, 4, AddressingMode::Absolute),
@@ -176,6 +185,31 @@ impl CPU {
         self.memory[addr as usize] = data;
     }
 
+    fn adc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        let a = self.register_a;
+        let c = if self.status & 0b0000_0001 != 0 { 1 } else { 0 };
+
+        let sum = (a as u16) + (value as u16) + (c as u16);
+
+        if sum > 0xFF {
+            self.status |= 0b0000_0001;
+        } else {
+            self.status &= !0b0000_0001;
+        }
+
+        self.register_a = sum as u8;
+
+        if ((a ^ self.register_a) & (value ^ self.register_a) & 0x80) != 0 {
+            self.status = self.status | 0b0100_0000;
+        } else {
+            self.status = self.status | 0b0000_0000;
+        }
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     fn lda(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
@@ -230,6 +264,7 @@ impl CPU {
             };
 
             match opcode.mnemonic {
+                Mnemonic::ADC => self.adc(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -301,5 +336,256 @@ mod test {
         cpu.load_and_run(vec![0xa5, 0x10, 0x00]);
 
         assert_eq!(cpu.register_a, 0x55)
+    }
+
+    #[test]
+    fn test_adc_immediate_pos_pos() {
+        // Test: 5 + 5 = 10
+        // Opcode: ADC #$05 (Immediate)
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x05]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0A);
+        // Flags: N=0, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_adc_immediate_pos_pos_overflow() {
+        // Test: 127 + 1 = 128 (-128 in signed) -> Overflow!
+        // Opcode: ADC #$01 (Immediate)
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x01]);
+        cpu.reset();
+
+        cpu.register_a = 0x7f;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x80);
+        // Flags: N=1, V=1, Z=0, C=0
+        assert_eq!(cpu.status, 0b1100_0000);
+    }
+
+    #[test]
+    fn test_adc_immediate_nega_nega() {
+        // Test: -1 + -2 = -3 (0xFD) -> Carry occurs (unsigned 255+254 > 255)
+        // Opcode: ADC #$FE (Immediate)
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0xFE]);
+        cpu.reset();
+
+        cpu.register_a = 0xFF;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0xFD);
+        // Flags: N=1, V=0, Z=0, C=1
+        assert_eq!(cpu.status, 0b1000_0001);
+    }
+
+    #[test]
+    fn test_adc_immediate_nega_nega_overflow() {
+        // Test: -128 + -128 = -256 (0x00) -> Overflow!
+        // Opcode: ADC #$80 (Immediate)
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0x80]);
+        cpu.reset();
+
+        cpu.register_a = 0x80;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x00);
+        // Flags: N=0, V=1, Z=1, C=1
+        assert_eq!(cpu.status, 0b0100_0011);
+    }
+
+    #[test]
+    fn test_adc_immediate_pos_nega_result_pos() {
+        // Test: 5 + -1 = 4 (0x04) -> Carry occurs
+        // Opcode: ADC #$FF (Immediate)
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0xFF]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x04);
+        // Flags: N=0, V=0, Z=0, C=1
+        assert_eq!(cpu.status, 0b0000_0001);
+    }
+
+    #[test]
+    fn test_adc_immediate_pos_nega_result_zero() {
+        // Test: 1 + -1 = 0 (0x00) -> Carry occurs
+        // Opcode: ADC #$FF (Immediate)
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0xFF]);
+        cpu.reset();
+
+        cpu.register_a = 0x01;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x00);
+        // Flags: N=0, V=0, Z=1, C=1
+        assert_eq!(cpu.status, 0b0000_0011);
+    }
+
+    #[test]
+    fn test_adc_immediate_pos_nega_result_nega() {
+        // Test: 1 + -2 = -1 (0xFF) -> No Carry
+        // Opcode: ADC #$FE (Immediate)
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x69, 0xFE]);
+        cpu.reset();
+
+        cpu.register_a = 0x01;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0xFF);
+        // Flags: N=1, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b1000_0000);
+    }
+
+    #[test]
+    fn test_adc_zeropage_pos_pos() {
+        // Test: 5 + 5 = 10
+        // Opcode: ADC $10 (ZeroPage)
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x65, 0x10]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.mem_write(0x10, 0x05); // Data at $10
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0A);
+        // Flags: N=0, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_adc_zeropage_x_pos_pos() {
+        // Test: 5 + 5 = 10
+        // Opcode: ADC $10,X (ZeroPage, X)
+        // Address: $10 + X($05) = $15
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x75, 0x10]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.register_x = 0x05;
+        cpu.mem_write(0x15, 0x05); // Data at $15
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0A);
+        // Flags: N=0, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_adc_absolute_pos_pos() {
+        // Test: 5 + 5 = 10
+        // Opcode: ADC $1234 (Absolute)
+        // Note: Little Endian means $34 then $12
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x6D, 0x34, 0x12]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.mem_write(0x1234, 0x0005); // Data at $1234
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0A);
+        // Flags: N=0, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_adc_absolute_x_pos_pos() {
+        // Test: 5 + 5 = 10
+        // Opcode: ADC $1000,X (Absolute, X)
+        // Address: $1000 + X($05) = $1005
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x7D, 0x00, 0x10]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.register_x = 0x05;
+        cpu.mem_write(0x1005, 0x0005); // Data at $1005
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0A);
+        // Flags: N=0, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_adc_absolute_y_pos_pos() {
+        // Test: 5 + 5 = 10
+        // Opcode: ADC $1000,Y (Absolute, Y)
+        // Address: $1000 + Y($05) = $1005
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x79, 0x00, 0x10]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.register_y = 0x05;
+        cpu.mem_write(0x1005, 0x0005); // Data at $1005
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0A);
+        // Flags: N=0, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_adc_indirect_x_pos_pos() {
+        // Test: 5 + 5 = 10
+        // Opcode: ADC ($20,X) (Indirect, X)
+        // Pointer Addr: $20 + X($04) = $24
+        // Pointer Value: $0074 (from $24 & $25)
+        // Target Addr: $0074
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x61, 0x20]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.register_x = 0x04;
+
+        cpu.mem_write(0x24, 0x74); // Low byte of ptr
+        cpu.mem_write(0x25, 0x00); // High byte of ptr
+        cpu.mem_write(0x74, 0x05); // Data at target
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0A);
+        // Flags: N=0, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_adc_indirect_y_pos_pos() {
+        // Test: 5 + 5 = 10
+        // Opcode: ADC ($20),Y (Indirect, Y)
+        // Base Addr: $1000 (from $20 & $21)
+        // Target Addr: $1000 + Y($05) = $1005
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x71, 0x20]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.register_y = 0x05;
+
+        cpu.mem_write(0x20, 0x00); // Low byte of base
+        cpu.mem_write(0x21, 0x10); // High byte of base
+        cpu.mem_write(0x1005, 0x05); // Data at target
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x0A);
+        // Flags: N=0, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
     }
 }
