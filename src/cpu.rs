@@ -62,6 +62,13 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x71, Mnemonic::ADC, 2, 5, AddressingMode::Indirect_Y),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xF5, Mnemonic::SBC, 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0xED, Mnemonic::SBC, 3, 4, AddressingMode::Absolute),
+        OpCode::new(0xFD, Mnemonic::SBC, 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0xF9, Mnemonic::SBC, 3, 4, AddressingMode::Absolute_Y),
+        OpCode::new(0xE1, Mnemonic::SBC, 2, 6, AddressingMode::Indirect_X),
+        OpCode::new(0xF1, Mnemonic::SBC, 2, 5, AddressingMode::Indirect_Y),
         // LDA
         OpCode::new(0xA9, Mnemonic::LDA, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xA5, Mnemonic::LDA, 2, 3, AddressingMode::ZeroPage),
