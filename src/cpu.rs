@@ -20,6 +20,7 @@ pub enum AddressingMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mnemonic {
     ADC,
+    SBC,
     LDA,
     TAX,
     INX,
@@ -58,6 +59,7 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x79, Mnemonic::ADC, 3, 4, AddressingMode::Absolute_Y),
         OpCode::new(0x61, Mnemonic::ADC, 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0x71, Mnemonic::ADC, 2, 5, AddressingMode::Indirect_Y),
+        OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xA9, Mnemonic::LDA, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xA5, Mnemonic::LDA, 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xAD, Mnemonic::LDA, 3, 4, AddressingMode::Absolute),
@@ -189,6 +191,10 @@ impl CPU {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
 
+        self.add_with_carry(value);
+    }
+
+    fn add_with_carry(&mut self, value: u8) {
         let a = self.register_a;
         let c = if self.status & 0b0000_0001 != 0 { 1 } else { 0 };
 
@@ -207,7 +213,14 @@ impl CPU {
         } else {
             self.status = self.status | 0b0000_0000;
         }
-        self.update_zero_and_negative_flags(self.register_a);
+        self.update_zero_and_negative_flags(self.register_a);   
+    }
+
+    fn sbc(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = !self.mem_read(addr);
+
+        self.add_with_carry(value);
     }
 
     fn lda(&mut self, mode: &AddressingMode) {
@@ -265,6 +278,7 @@ impl CPU {
 
             match opcode.mnemonic {
                 Mnemonic::ADC => self.adc(&opcode.mode),
+                Mnemonic::SBC => self.sbc(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -587,5 +601,90 @@ mod test {
         assert_eq!(cpu.register_a, 0x0A);
         // Flags: N=0, V=0, Z=0, C=0
         assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_sbc_immediate_pos_pos_no_borrow() {
+        // Test: 5 - 3 = 2
+        // Opcode: SBC #$03
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xE9, 0x03]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.status = 0b0000_0001;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x02);
+        // Flags: N=0, V=0, Z=0, C=1
+        assert_eq!(cpu.status, 0b0000_0001);
+    }
+
+    #[test]
+    fn test_sbc_immediate_pos_pos_borrow() {
+        // Test: 3 - 5 =  -2 (0xFE)
+        // Opcode: SBC #$05
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xE9, 0x05]);
+        cpu.reset();
+
+        cpu.register_a = 0x03;
+        cpu.status = 0b0000_0001;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0xFE);
+        // Flags: N=1, V=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b1000_0000);
+    }
+
+    #[test]
+    fn test_sbc_immediate_pos_neg_overflow() {
+        // Test: 127 - (-2) = 129 (0x81) -> Overflow!
+        // Opcode: SBC #$FE
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xE9, 0xFE]);
+        cpu.reset();
+
+        cpu.register_a = 0x7F;
+        cpu.status = 0b0000_0001;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x81);
+        // Flags: N=1, V=1, Z=0, C=0
+        assert_eq!(cpu.status, 0b1100_0000);
+    }
+
+    #[test]
+    fn test_sbc_immediate_neg_pos_overflow() {
+        // Test: -128 - 1 = -129 -> Overflow!
+        // Opcode: SBC #$01
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xE9, 0x01]);
+        cpu.reset();
+
+        cpu.register_a = 0x80;
+        cpu.status = 0b0000_0001;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x7F);
+        // Flags: N=0, V=1, Z=0, C=1
+        assert_eq!(cpu.status, 0b0100_0001);
+    }
+
+    #[test]
+    fn test_sbc_immediate_with_borrow() {
+        // Test: 5 - 3 - 1 (borrow) = 1
+        // Opcode: SBC #$03
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xE9, 0x03]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.status = 0b0000_0000;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0x01);
+        // Flags: N=0, V=0, Z=0, C=1
+        assert_eq!(cpu.status, 0b0000_0001);
     }
 }
