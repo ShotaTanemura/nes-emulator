@@ -74,6 +74,7 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xA5, Mnemonic::LDA, 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xAD, Mnemonic::LDA, 3, 4, AddressingMode::Absolute),
         // TAX
+        OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Implied),
         // BRK
         OpCode::new(0x00, Mnemonic::BRK, 1, 7, AddressingMode::Implied),
         // INX
