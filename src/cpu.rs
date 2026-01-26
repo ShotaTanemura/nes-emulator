@@ -227,7 +227,7 @@ impl CPU {
         } else {
             self.status = self.status | 0b0000_0000;
         }
-        self.update_zero_and_negative_flags(self.register_a);   
+        self.update_zero_and_negative_flags(self.register_a);
     }
 
     fn sbc(&mut self, mode: &AddressingMode) {
