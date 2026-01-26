@@ -51,6 +51,7 @@ impl OpCode {
 
 pub fn get_opcodes() -> Vec<OpCode> {
     vec![
+        // ADC
         OpCode::new(0x69, Mnemonic::ADC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0x65, Mnemonic::ADC, 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0x75, Mnemonic::ADC, 2, 4, AddressingMode::ZeroPage_X),
@@ -59,13 +60,18 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x79, Mnemonic::ADC, 3, 4, AddressingMode::Absolute_Y),
         OpCode::new(0x61, Mnemonic::ADC, 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0x71, Mnemonic::ADC, 2, 5, AddressingMode::Indirect_Y),
+        // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
+        // LDA
         OpCode::new(0xA9, Mnemonic::LDA, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xA5, Mnemonic::LDA, 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xAD, Mnemonic::LDA, 3, 4, AddressingMode::Absolute),
-        OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Immediate),
+        // TAX
+        // BRK
         OpCode::new(0x00, Mnemonic::BRK, 1, 7, AddressingMode::Implied),
+        // INX
         OpCode::new(0xE8, Mnemonic::INX, 1, 2, AddressingMode::Implied),
+        // STA
         OpCode::new(0x85, Mnemonic::STA, 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0x95, Mnemonic::STA, 2, 4, AddressingMode::ZeroPage_X),
     ]
