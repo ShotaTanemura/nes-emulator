@@ -1,4 +1,3 @@
-use std::collections::HashMap;
 use std::vec;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
@@ -91,15 +90,15 @@ pub struct CPU {
     pub register_y: u8,
     pub status: u8,
     pub program_counter: u16,
-    pub instructions: HashMap<u8, OpCode>,
+    pub instructions: [Option<OpCode>; 256],
     memory: [u8; 0xFFFF],
 }
 
 impl CPU {
     pub fn new() -> Self {
-        let mut instructions = HashMap::new();
+        let mut instructions = [None; 256];
         for op in get_opcodes() {
-            instructions.insert(op.code, op);
+            instructions[op.code as usize] = Some(op);
         }
         CPU {
             register_a: 0,
@@ -283,8 +282,8 @@ impl CPU {
             let code = self.mem_read(self.program_counter);
             self.program_counter += 1;
 
-            let opcode = match self.instructions.get(&code) {
-                Some(op) => *op,
+            let opcode = match self.instructions[code as usize] {
+                Some(op) => op,
                 None => {
                     todo!();
                 }
