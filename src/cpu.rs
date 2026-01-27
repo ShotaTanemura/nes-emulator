@@ -1,5 +1,3 @@
-use std::vec;
-
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 pub enum AddressingMode {
@@ -19,6 +17,7 @@ pub enum AddressingMode {
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum Mnemonic {
     ADC,
+    AND,
     SBC,
     LDA,
     TAX,
@@ -59,6 +58,15 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x79, Mnemonic::ADC, 3, 4, AddressingMode::Absolute_Y),
         OpCode::new(0x61, Mnemonic::ADC, 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0x71, Mnemonic::ADC, 2, 5, AddressingMode::Indirect_Y),
+        // AND
+        OpCode::new(0x29, Mnemonic::AND, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x25, Mnemonic::AND, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x35, Mnemonic::AND, 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x2D, Mnemonic::AND, 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x3D, Mnemonic::AND, 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0x39, Mnemonic::AND, 3, 4, AddressingMode::Absolute_Y),
+        OpCode::new(0x21, Mnemonic::AND, 2, 6, AddressingMode::Indirect_X),
+        OpCode::new(0x31, Mnemonic::AND, 2, 5, AddressingMode::Indirect_Y),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -229,6 +237,14 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    fn and(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        self.register_a &= value;
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -291,6 +307,7 @@ impl CPU {
 
             match opcode.mnemonic {
                 Mnemonic::ADC => self.adc(&opcode.mode),
+                Mnemonic::AND => self.and(&opcode.mode),
                 Mnemonic::SBC => self.sbc(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
@@ -614,6 +631,48 @@ mod test {
         assert_eq!(cpu.register_a, 0x0A);
         // Flags: N=0, V=0, Z=0, C=0
         assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_and_immediate_no_flags() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x29, 0b0010_1101]);
+        cpu.reset();
+
+        cpu.register_a = 0b0001_1111;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b0000_1101);
+        // Flags: N=0, Z=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_and_immediate_zero_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x29, 0b0010_1101]);
+        cpu.reset();
+
+        cpu.register_a = 0b0000_0010;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b0000_0000);
+        // Flags: N=0, Z=1
+        assert_eq!(cpu.status, 0b0000_0010);
+    }
+
+    #[test]
+    fn test_and_immediate_negative_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x29, 0b1010_1101]);
+        cpu.reset();
+
+        cpu.register_a = 0b1000_0010;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b1000_0000);
+        // Flags: N=1, Z=0
+        assert_eq!(cpu.status, 0b1000_0000);
     }
 
     #[test]
