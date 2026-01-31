@@ -11,6 +11,7 @@ pub enum AddressingMode {
     Absolute_Y,
     Indirect_X,
     Indirect_Y,
+    Accumulator,
     NoneAddressing,
 }
 
@@ -18,6 +19,7 @@ pub enum AddressingMode {
 pub enum Mnemonic {
     ADC,
     AND,
+    ASL,
     SBC,
     LDA,
     TAX,
@@ -67,6 +69,12 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x39, Mnemonic::AND, 3, 4, AddressingMode::Absolute_Y),
         OpCode::new(0x21, Mnemonic::AND, 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0x31, Mnemonic::AND, 2, 5, AddressingMode::Indirect_Y),
+        // ASL
+        OpCode::new(0x0A, Mnemonic::ASL, 1, 2, AddressingMode::Accumulator),
+        OpCode::new(0x06, Mnemonic::ASL, 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x16, Mnemonic::ASL, 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0x0E, Mnemonic::ASL, 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x1E, Mnemonic::ASL, 3, 7, AddressingMode::Absolute_X),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -164,7 +172,7 @@ impl CPU {
                 let deref = deref_base.wrapping_add(self.register_y as u16);
                 deref
             }
-            AddressingMode::NoneAddressing => {
+            AddressingMode::NoneAddressing | AddressingMode::Accumulator => {
                 panic!("mode {:?} is not supported", mode);
             }
         }
@@ -245,6 +253,25 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_a);
     }
 
+    fn asl(&mut self, mode: &AddressingMode) {
+        if *mode == AddressingMode::Accumulator {
+            let c = self.register_a & 0x80;
+            self.register_a = self.register_a << 1;
+            if c == 0b1000_0000 {
+                self.status |= 0b0000_0001;
+            }
+        } else {
+            let addr = self.get_operand_address(mode);
+            let value = self.mem_read(addr);
+            let c = value & 0x80;
+            self.register_a = value << 1;
+            if c == 0b1000_0000 {
+                self.status |= 0b0000_0001;
+            }
+        }
+        self.update_zero_and_negative_flags(self.register_a);
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -308,6 +335,7 @@ impl CPU {
             match opcode.mnemonic {
                 Mnemonic::ADC => self.adc(&opcode.mode),
                 Mnemonic::AND => self.and(&opcode.mode),
+                Mnemonic::ASL => self.asl(&opcode.mode),
                 Mnemonic::SBC => self.sbc(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
@@ -672,6 +700,48 @@ mod test {
 
         assert_eq!(cpu.register_a, 0b1000_0000);
         // Flags: N=1, Z=0
+        assert_eq!(cpu.status, 0b1000_0000);
+    }
+
+    #[test]
+    fn test_asl_accumulator_no_flags() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x0A]);
+        cpu.reset();
+
+        cpu.register_a = 0b0000_0010;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b0000_0100);
+        // Flags: N=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_asl_accumulator_carry_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x0A]);
+        cpu.reset();
+
+        cpu.register_a = 0b1000_0001;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b0000_0010);
+        // Flags: N=0, Z=0, C=1
+        assert_eq!(cpu.status, 0b0000_0001);
+    }
+
+    #[test]
+    fn test_asl_accumulator_negative_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x0A]);
+        cpu.reset();
+
+        cpu.register_a = 0b0100_0000;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b1000_0000);
+        // Flags: N=1, Z=0, C=0
         assert_eq!(cpu.status, 0b1000_0000);
     }
 
