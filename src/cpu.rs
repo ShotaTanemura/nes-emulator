@@ -12,6 +12,7 @@ pub enum AddressingMode {
     Indirect_X,
     Indirect_Y,
     Accumulator,
+    Relative,
     NoneAddressing,
 }
 
@@ -20,6 +21,7 @@ pub enum Mnemonic {
     ADC,
     AND,
     ASL,
+    BCC,
     SBC,
     LDA,
     TAX,
@@ -75,6 +77,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x16, Mnemonic::ASL, 2, 6, AddressingMode::ZeroPage_X),
         OpCode::new(0x0E, Mnemonic::ASL, 3, 6, AddressingMode::Absolute),
         OpCode::new(0x1E, Mnemonic::ASL, 3, 7, AddressingMode::Absolute_X),
+        // BCC
+        OpCode::new(0x90, Mnemonic::BCC, 2, 2, AddressingMode::Relative),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -172,6 +176,7 @@ impl CPU {
                 let deref = deref_base.wrapping_add(self.register_y as u16);
                 deref
             }
+            AddressingMode::Relative => self.program_counter,
             AddressingMode::NoneAddressing | AddressingMode::Accumulator => {
                 panic!("mode {:?} is not supported", mode);
             }
@@ -272,6 +277,16 @@ impl CPU {
         }
     }
 
+    fn bcc(&mut self, mode: &AddressingMode) {
+        if self.status & 0b0000_0001 != 0 {
+            return;
+        }
+
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read_u16(addr);
+        self.program_counter += value;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -343,6 +358,7 @@ impl CPU {
                 Mnemonic::ADC => self.adc(&opcode.mode),
                 Mnemonic::AND => self.and(&opcode.mode),
                 Mnemonic::ASL => self.asl(&opcode.mode),
+                Mnemonic::BCC => self.bcc(&opcode.mode),
                 Mnemonic::SBC => self.sbc(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
@@ -766,6 +782,33 @@ mod test {
         assert_eq!(result, 0b0000_1100);
         // Flags: N=0, Z=0, C=0
         assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_bcc_relative_success() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x90, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write_u16(0x05, 0x06);
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 0x08);
+    }
+
+    #[test]
+    fn test_bcc_relative_fail() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x90, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write_u16(0x05, 0x06);
+        let before = cpu.program_counter;
+        cpu.status = 0b0000_0001;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
     }
 
     #[test]
