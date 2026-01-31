@@ -24,6 +24,7 @@ pub enum Mnemonic {
     BCC,
     BCS,
     BEQ,
+    BIT,
     SBC,
     LDA,
     TAX,
@@ -85,6 +86,9 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xB0, Mnemonic::BCS, 2, 2, AddressingMode::Relative),
         // BEQ
         OpCode::new(0xF0, Mnemonic::BEQ, 2, 2, AddressingMode::Relative),
+        // BIT
+        OpCode::new(0x24, Mnemonic::BIT, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x2C, Mnemonic::BIT, 3, 4, AddressingMode::Absolute),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -313,6 +317,21 @@ impl CPU {
         self.program_counter += value;
     }
 
+    fn bit(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        let v = value & 0x80;
+        let n = value & 0x40;
+
+        if self.register_a & value == 0 {
+            self.status |= 0b0000_0010;
+        } else {
+            self.status &= 0b1111_1101;
+        }
+        self.status |= v;
+        self.status |= n;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -388,6 +407,7 @@ impl CPU {
                 Mnemonic::SBC => self.sbc(&opcode.mode),
                 Mnemonic::BCS => self.bcs(&opcode.mode),
                 Mnemonic::BEQ => self.beq(&opcode.mode),
+                Mnemonic::BIT => self.bit(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -891,6 +911,62 @@ mod test {
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
+    }
+
+    #[test]
+    fn test_bit_zero_page_non_zero() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x24, 0x05]);
+        cpu.reset();
+
+        cpu.register_a = 0b1100_0000;
+        cpu.mem_write(0x05, 0b1000_0000);
+        cpu.run();
+
+        // Flags: N=1, V=0, Z=0
+        assert_eq!(cpu.status, 0b1000_0000)
+    }
+
+    #[test]
+    fn test_bit_zero_page_zero() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x24, 0x05]);
+        cpu.reset();
+
+        cpu.register_a = 0b1000_0000;
+        cpu.mem_write(0x05, 0b0101_0101);
+        cpu.run();
+
+        // Flags: N=0, V=1, Z=1
+        assert_eq!(cpu.status, 0b0100_0010)
+    }
+
+    #[test]
+    fn test_bit_absolute_non_zero() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x2C, 0x00, 0x50]);
+        cpu.reset();
+
+        cpu.register_a = 0b1100_0000;
+        cpu.mem_write(0x5000, 0b1000_0000);
+        cpu.run();
+
+        // Flags: N=1, V=0, Z=0
+        assert_eq!(cpu.status, 0b1000_0000)
+    }
+
+    #[test]
+    fn test_bit_absolute_zero() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x2C, 0x00, 0x50]);
+        cpu.reset();
+
+        cpu.register_a = 0b1000_0000;
+        cpu.mem_write(0x5000, 0b0101_0101);
+        cpu.run();
+
+        // Flags: N=0, V=1, Z=1
+        assert_eq!(cpu.status, 0b0100_0010)
     }
 
     #[test]
