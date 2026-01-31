@@ -255,21 +255,21 @@ impl CPU {
 
     fn asl(&mut self, mode: &AddressingMode) {
         if *mode == AddressingMode::Accumulator {
-            let c = self.register_a & 0x80;
+            let c = if self.register_a & 0x80 == 0x80 { 1 } else { 0 };
+
             self.register_a = self.register_a << 1;
-            if c == 0b1000_0000 {
-                self.status |= 0b0000_0001;
-            }
+            self.status |= c;
+            self.update_zero_and_negative_flags(self.register_a);
         } else {
             let addr = self.get_operand_address(mode);
             let value = self.mem_read(addr);
-            let c = value & 0x80;
-            self.register_a = value << 1;
-            if c == 0b1000_0000 {
-                self.status |= 0b0000_0001;
-            }
+            let c = if value & 0x80 == 0x80 { 1 } else { 0 };
+            let result = value << 1;
+
+            self.mem_write(addr, result);
+            self.status |= c;
+            self.update_zero_and_negative_flags(result)
         }
-        self.update_zero_and_negative_flags(self.register_a);
     }
 
     fn sbc(&mut self, mode: &AddressingMode) {
@@ -302,12 +302,19 @@ impl CPU {
     }
 
     fn update_zero_and_negative_flags(&mut self, result: u8) {
+        self.update_zero_flag(result);
+        self.update_negative_flag(result);
+    }
+
+    fn update_zero_flag(&mut self, result: u8) {
         if result == 0 {
             self.status = self.status | 0b0000_0010;
         } else {
             self.status = self.status & 0b1111_1101;
         }
+    }
 
+    fn update_negative_flag(&mut self, result: u8) {
         if result & 0b1000_0000 != 0 {
             self.status = self.status | 0b1000_0000;
         } else {
@@ -743,6 +750,22 @@ mod test {
         assert_eq!(cpu.register_a, 0b1000_0000);
         // Flags: N=1, Z=0, C=0
         assert_eq!(cpu.status, 0b1000_0000);
+    }
+
+    #[test]
+    fn test_asl_zeropage_no_flags() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x06, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write(0x05, 0x06);
+        cpu.run();
+
+        let result = cpu.mem_read(0x05);
+
+        assert_eq!(result, 0b0000_1100);
+        // Flags: N=0, Z=0, C=0
+        assert_eq!(cpu.status, 0b0000_0000);
     }
 
     #[test]
