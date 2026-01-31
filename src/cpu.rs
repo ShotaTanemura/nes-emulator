@@ -23,6 +23,7 @@ pub enum Mnemonic {
     ASL,
     BCC,
     BCS,
+    BEQ,
     SBC,
     LDA,
     TAX,
@@ -82,6 +83,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x90, Mnemonic::BCC, 2, 2, AddressingMode::Relative),
         // BCS
         OpCode::new(0xB0, Mnemonic::BCS, 2, 2, AddressingMode::Relative),
+        // BEQ
+        OpCode::new(0xF0, Mnemonic::BEQ, 2, 2, AddressingMode::Relative),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -300,6 +303,16 @@ impl CPU {
         self.program_counter += value;
     }
 
+    fn beq(&mut self, mode: &AddressingMode) {
+        if self.status & 0b0000_0010 == 0 {
+            return;
+        }
+
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read_u16(addr);
+        self.program_counter += value;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -374,6 +387,7 @@ impl CPU {
                 Mnemonic::BCC => self.bcc(&opcode.mode),
                 Mnemonic::SBC => self.sbc(&opcode.mode),
                 Mnemonic::BCS => self.bcs(&opcode.mode),
+                Mnemonic::BEQ => self.beq(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -843,6 +857,33 @@ mod test {
     fn test_bcs_relative_fail() {
         let mut cpu = CPU::new();
         cpu.load(vec![0xB0, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write_u16(0x05, 0x06);
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+    }
+
+    #[test]
+    fn test_beq_relative_success() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xF0, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write_u16(0x05, 0x06);
+        let before = cpu.program_counter;
+        cpu.status = 0b0000_0010;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 0x08);
+    }
+
+    #[test]
+    fn test_beq_relative_fail() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xF0, 0x05]);
         cpu.reset();
 
         cpu.mem_write_u16(0x05, 0x06);
