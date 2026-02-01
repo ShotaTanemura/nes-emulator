@@ -978,7 +978,7 @@ mod test {
     }
 
     #[test]
-    fn test_bit_relative_success() {
+    fn test_bmi_relative_success() {
         let mut cpu = CPU::new();
         cpu.load(vec![0x30, 0x05]);
         cpu.reset();
@@ -991,7 +991,7 @@ mod test {
     }
 
     #[test]
-    fn test_bit_relative_fail() {
+    fn test_bmi_relative_fail() {
         let mut cpu = CPU::new();
         cpu.load(vec![0x30, 0x05]);
         cpu.reset();
