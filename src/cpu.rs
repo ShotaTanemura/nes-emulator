@@ -293,7 +293,7 @@ impl CPU {
         }
 
         let addr = self.get_operand_address(mode);
-        let value = self.mem_read_u16(addr);
+        let value = self.mem_read(addr) as u16;
         self.program_counter += value;
     }
 
@@ -303,7 +303,7 @@ impl CPU {
         }
 
         let addr = self.get_operand_address(mode);
-        let value = self.mem_read_u16(addr);
+        let value = self.mem_read(addr) as u16;
         self.program_counter += value;
     }
 
@@ -313,7 +313,7 @@ impl CPU {
         }
 
         let addr = self.get_operand_address(mode);
-        let value = self.mem_read_u16(addr);
+        let value = self.mem_read(addr) as u16;
         self.program_counter += value;
     }
 
@@ -838,7 +838,6 @@ mod test {
         cpu.load(vec![0x90, 0x05]);
         cpu.reset();
 
-        cpu.mem_write_u16(0x05, 0x06);
         let before = cpu.program_counter;
         cpu.run();
 
@@ -851,7 +850,6 @@ mod test {
         cpu.load(vec![0x90, 0x05]);
         cpu.reset();
 
-        cpu.mem_write_u16(0x05, 0x06);
         let before = cpu.program_counter;
         cpu.status = 0b0000_0001;
         cpu.run();
@@ -865,7 +863,6 @@ mod test {
         cpu.load(vec![0xB0, 0x05]);
         cpu.reset();
 
-        cpu.mem_write_u16(0x05, 0x06);
         let before = cpu.program_counter;
         cpu.status = 0b0000_0001;
         cpu.run();
@@ -879,7 +876,6 @@ mod test {
         cpu.load(vec![0xB0, 0x05]);
         cpu.reset();
 
-        cpu.mem_write_u16(0x05, 0x06);
         let before = cpu.program_counter;
         cpu.run();
 
@@ -892,7 +888,6 @@ mod test {
         cpu.load(vec![0xF0, 0x05]);
         cpu.reset();
 
-        cpu.mem_write_u16(0x05, 0x06);
         let before = cpu.program_counter;
         cpu.status = 0b0000_0010;
         cpu.run();
@@ -906,7 +901,6 @@ mod test {
         cpu.load(vec![0xF0, 0x05]);
         cpu.reset();
 
-        cpu.mem_write_u16(0x05, 0x06);
         let before = cpu.program_counter;
         cpu.run();
 
