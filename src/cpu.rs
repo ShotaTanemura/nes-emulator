@@ -27,6 +27,7 @@ pub enum Mnemonic {
     BIT,
     BMI,
     BNE,
+    BPL,
     SBC,
     LDA,
     TAX,
@@ -95,6 +96,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x30, Mnemonic::BMI, 2, 2, AddressingMode::Relative),
         // BNE
         OpCode::new(0xD0, Mnemonic::BNE, 2, 2, AddressingMode::Relative),
+        // BPL
+        OpCode::new(0x10, Mnemonic::BPL, 2, 2, AddressingMode::Relative),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -358,6 +361,16 @@ impl CPU {
         self.program_counter += value;
     }
 
+    fn bpl(&mut self, mode: &AddressingMode) {
+        if self.status & 0b1000_0000 != 0 {
+            return;
+        }
+
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr) as u16;
+        self.program_counter += value;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -436,6 +449,7 @@ impl CPU {
                 Mnemonic::BIT => self.bit(&opcode.mode),
                 Mnemonic::BMI => self.bmi(&opcode.mode),
                 Mnemonic::BNE => self.bne(&opcode.mode),
+                Mnemonic::BPL => self.bpl(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1036,6 +1050,31 @@ mod test {
 
         let before = cpu.program_counter;
         cpu.status = 0b0000_0010;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+    }
+
+    #[test]
+    fn test_bpl_relative_success() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x10, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 0x08);
+    }
+
+    #[test]
+    fn test_bpl_relative_fail() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x10, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.status = 0b1000_0000;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
