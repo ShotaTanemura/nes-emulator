@@ -301,9 +301,7 @@ impl CPU {
             return;
         }
 
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr) as u16;
-        self.program_counter += value;
+        self.branch(mode);
     }
 
     fn bcs(&mut self, mode: &AddressingMode) {
@@ -311,9 +309,7 @@ impl CPU {
             return;
         }
 
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr) as u16;
-        self.program_counter += value;
+        self.branch(mode);
     }
 
     fn beq(&mut self, mode: &AddressingMode) {
@@ -321,9 +317,7 @@ impl CPU {
             return;
         }
 
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr) as u16;
-        self.program_counter += value;
+        self.branch(mode);
     }
 
     fn bit(&mut self, mode: &AddressingMode) {
@@ -346,9 +340,7 @@ impl CPU {
             return;
         }
 
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr) as u16;
-        self.program_counter += value;
+        self.branch(mode);
     }
 
     fn bne(&mut self, mode: &AddressingMode) {
@@ -356,9 +348,7 @@ impl CPU {
             return;
         }
 
-        let addr = self.get_operand_address(mode);
-        let value = self.mem_read(addr) as u16;
-        self.program_counter += value;
+        self.branch(mode);
     }
 
     fn bpl(&mut self, mode: &AddressingMode) {
@@ -366,6 +356,10 @@ impl CPU {
             return;
         }
 
+        self.branch(mode);
+    }
+
+    fn branch(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr) as u16;
         self.program_counter += value;
