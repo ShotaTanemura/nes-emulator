@@ -28,6 +28,7 @@ pub enum Mnemonic {
     BMI,
     BNE,
     BPL,
+    BVC,
     SBC,
     LDA,
     TAX,
@@ -98,6 +99,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xD0, Mnemonic::BNE, 2, 2, AddressingMode::Relative),
         // BPL
         OpCode::new(0x10, Mnemonic::BPL, 2, 2, AddressingMode::Relative),
+        // BVC
+        OpCode::new(0x50, Mnemonic::BVC, 2, 2, AddressingMode::Relative),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -359,6 +362,14 @@ impl CPU {
         self.branch(mode);
     }
 
+    fn bvc(&mut self, mode: &AddressingMode) {
+        if self.status & 0b0100_0000 != 0 {
+            return;
+        }
+
+        self.branch(mode);
+    }
+
     fn branch(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr) as u16;
@@ -444,6 +455,7 @@ impl CPU {
                 Mnemonic::BMI => self.bmi(&opcode.mode),
                 Mnemonic::BNE => self.bne(&opcode.mode),
                 Mnemonic::BPL => self.bpl(&opcode.mode),
+                Mnemonic::BVC => self.bvc(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1069,6 +1081,31 @@ mod test {
 
         let before = cpu.program_counter;
         cpu.status = 0b1000_0000;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+    }
+
+    #[test]
+    fn test_bvc_relative_success() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x50, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 0x08);
+    }
+
+    #[test]
+    fn test_bvc_relative_fail() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x50, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.status = 0b0100_0000;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
