@@ -1720,7 +1720,7 @@ mod test {
     #[test]
     fn test_eor_immediate_xor_with_negative_flag() {
         let mut cpu = CPU::new();
-        cpu.load(vec![0x49, 0x05]);
+        cpu.load(vec![0x49, 0xff]);
         cpu.reset();
 
         cpu.register_a = 0x05;
@@ -1728,8 +1728,8 @@ mod test {
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
-        assert_eq!(cpu.status, status_flag::ZERO);
-        assert_eq!(cpu.register_a, 0x05 ^ 0x05);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
+        assert_eq!(cpu.register_a, 0x05 ^ 0xff);
     }
 
     #[test]
