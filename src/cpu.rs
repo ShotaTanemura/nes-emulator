@@ -554,31 +554,28 @@ impl CPU {
     fn inc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
+        let result = self.increment(value);
 
+        self.mem_write(addr, result);
+    }
+
+    fn inx(&mut self) {
+        self.register_x = self.increment(self.register_x)
+    }
+
+    fn increment(&mut self, value: u8) -> u8 {
         let result = match value {
             u8::MAX => u8::MIN,
             _ => value + 1,
         };
 
-        self.mem_write(addr, result);
         self.status = match result {
             0 => self.status | status_flag::ZERO,
             x if (x & status_flag::NEGATIVE) != 0 => self.status | status_flag::NEGATIVE,
             _ => self.status,
-        }
-    }
-
-    fn inx(&mut self) {
-        self.register_x = match self.register_x {
-            u8::MAX => u8::MIN,
-            _ => self.register_x + 1,
         };
 
-        self.status = match self.register_x {
-            0 => self.status | status_flag::ZERO,
-            x if (x & status_flag::NEGATIVE) != 0 => self.status | status_flag::NEGATIVE,
-            _ => self.status,
-        }
+        result
     }
 
     fn sbc(&mut self, mode: &AddressingMode) {
