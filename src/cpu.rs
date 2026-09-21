@@ -40,6 +40,7 @@ pub enum Mnemonic {
     CPX,
     CPY,
     DEC,
+    DEX,
     SBC,
     LDA,
     TAX,
@@ -144,6 +145,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xD6, Mnemonic::DEC, 2, 6, AddressingMode::ZeroPage_X),
         OpCode::new(0xCE, Mnemonic::DEC, 3, 6, AddressingMode::Absolute),
         OpCode::new(0xDE, Mnemonic::DEC, 3, 7, AddressingMode::Absolute_X),
+        // DEX
+        OpCode::new(0xCA, Mnemonic::DEX, 1, 2, AddressingMode::Implied),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -500,6 +503,19 @@ impl CPU {
         }
     }
 
+    fn dex(&mut self) {
+        self.register_x = match self.register_x {
+            0 => u8::MAX,
+            _ => self.register_x - 1,
+        };
+
+        self.status = match self.register_x {
+            0 => self.status | status_flag::ZERO,
+            x if (x & status_flag::NEGATIVE) != 0 => self.status | status_flag::NEGATIVE,
+            _ => self.status,
+        }
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -589,6 +605,7 @@ impl CPU {
                 Mnemonic::CPX => self.cpx(&opcode.mode),
                 Mnemonic::CPY => self.cpy(&opcode.mode),
                 Mnemonic::DEC => self.dec(&opcode.mode),
+                Mnemonic::DEX => self.dex(),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1552,6 +1569,50 @@ mod test {
         assert_eq!(cpu.program_counter, before + 3);
         assert_eq!(cpu.status, status_flag::NEGATIVE);
         assert_eq!(cpu.mem_read(0x05), 0xFF);
+    }
+
+    #[test]
+    fn test_dex_implied_subtract_one_from_x() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xCA]);
+        cpu.reset();
+
+        cpu.register_x = 0x02;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.register_x, 0x01);
+    }
+
+    #[test]
+    fn test_dex_implied_subtract_one_from_x_with_zero_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xCA]);
+        cpu.reset();
+
+        cpu.register_x = 0x01;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::ZERO);
+        assert_eq!(cpu.register_x, 0x00);
+    }
+
+    #[test]
+    fn test_dex_implied_subtract_one_from_x_with_negative_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xCA]);
+        cpu.reset();
+
+        cpu.register_x = 0x00;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
+        assert_eq!(cpu.register_x, 0xFF);
     }
 
     #[test]
