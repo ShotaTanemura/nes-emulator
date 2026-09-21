@@ -45,6 +45,7 @@ pub enum Mnemonic {
     EOR,
     INC,
     INX,
+    INY,
     SBC,
     LDA,
     TAX,
@@ -168,6 +169,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xFE, Mnemonic::INC, 3, 7, AddressingMode::Absolute_X),
         // INX
         OpCode::new(0xE8, Mnemonic::INX, 1, 2, AddressingMode::Implied),
+        // INY
+        OpCode::new(0xC8, Mnemonic::INY, 1, 2, AddressingMode::Implied),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -563,6 +566,10 @@ impl CPU {
         self.register_x = self.increment(self.register_x)
     }
 
+    fn iny(&mut self) {
+        self.register_y = self.increment(self.register_y)
+    }
+
     fn increment(&mut self, value: u8) -> u8 {
         let result = match value {
             u8::MAX => u8::MIN,
@@ -665,6 +672,7 @@ impl CPU {
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
+                Mnemonic::INY => self.iny(),
                 Mnemonic::STA => self.sta(&opcode.mode),
                 Mnemonic::BRK => return,
             }
@@ -1801,6 +1809,50 @@ mod test {
         assert_eq!(cpu.program_counter, before + 3);
         assert_eq!(cpu.status, status_flag::NEGATIVE);
         assert_eq!(cpu.mem_read(0x05), 0xFF);
+    }
+
+    #[test]
+    fn test_iny_implied_increment() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC8]);
+        cpu.reset();
+
+        cpu.register_y = 0x00;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.register_y, 0x01);
+    }
+
+    #[test]
+    fn test_iny_implied_increment_with_zero_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC8]);
+        cpu.reset();
+
+        cpu.register_y = 0xFF;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::ZERO);
+        assert_eq!(cpu.register_y, 0x00);
+    }
+
+    #[test]
+    fn test_iny_implied_increment_with_negative_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC8]);
+        cpu.reset();
+
+        cpu.register_y = 0xFE;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
+        assert_eq!(cpu.register_y, 0xFF);
     }
 
     #[test]
