@@ -44,10 +44,10 @@ pub enum Mnemonic {
     DEY,
     EOR,
     INC,
+    INX,
     SBC,
     LDA,
     TAX,
-    INX,
     STA,
     BRK,
 }
@@ -166,6 +166,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xF6, Mnemonic::INC, 2, 6, AddressingMode::ZeroPage_X),
         OpCode::new(0xEE, Mnemonic::INC, 3, 6, AddressingMode::Absolute),
         OpCode::new(0xFE, Mnemonic::INC, 3, 7, AddressingMode::Absolute_X),
+        // INX
+        OpCode::new(0xE8, Mnemonic::INX, 1, 2, AddressingMode::Implied),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -566,6 +568,19 @@ impl CPU {
         }
     }
 
+    fn inx(&mut self) {
+        self.register_x = match self.register_x {
+            u8::MAX => u8::MIN,
+            _ => self.register_x + 1,
+        };
+
+        self.status = match self.register_x {
+            0 => self.status | status_flag::ZERO,
+            x if (x & status_flag::NEGATIVE) != 0 => self.status | status_flag::NEGATIVE,
+            _ => self.status,
+        }
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -583,15 +598,6 @@ impl CPU {
 
     fn tax(&mut self) {
         self.register_x = self.register_a;
-        self.update_zero_and_negative_flags(self.register_x);
-    }
-
-    fn inx(&mut self) {
-        if self.register_x == 0xff {
-            self.register_x = 0;
-        } else {
-            self.register_x += 1;
-        }
         self.update_zero_and_negative_flags(self.register_x);
     }
 
