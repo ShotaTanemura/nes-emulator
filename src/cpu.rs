@@ -32,6 +32,7 @@ pub enum Mnemonic {
     BVS,
     CLC,
     CLD,
+    CLI,
     SBC,
     LDA,
     TAX,
@@ -110,6 +111,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x18, Mnemonic::CLC, 1, 2, AddressingMode::Implied),
         // CLD
         OpCode::new(0xD8, Mnemonic::CLD, 1, 2, AddressingMode::Implied),
+        // CLI
+        OpCode::new(0x58, Mnemonic::CLI, 1, 2, AddressingMode::Implied),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -416,6 +419,10 @@ impl CPU {
         self.status &= !status_flag::DECIMAL;
     }
 
+    fn cli(&mut self) {
+        self.status &= !status_flag::INTERRUPT;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -499,6 +506,7 @@ impl CPU {
                 Mnemonic::BVS => self.bvs(&opcode.mode),
                 Mnemonic::CLC => self.clc(),
                 Mnemonic::CLD => self.cld(),
+                Mnemonic::CLI => self.cli(),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1232,6 +1240,34 @@ mod test {
 
         let before = cpu.program_counter;
         cpu.status = status_flag::NEGATIVE + status_flag::DECIMAL + status_flag::ZERO;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::NEGATIVE + status_flag::ZERO);
+    }
+
+    #[test]
+    fn test_cli_implied_clear_interrupt_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x58]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.status = status_flag::INTERRUPT;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_cli_implied_clear_only_interrupt_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x58]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.status = status_flag::NEGATIVE + status_flag::INTERRUPT + status_flag::ZERO;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 2);
