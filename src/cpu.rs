@@ -42,6 +42,7 @@ pub enum Mnemonic {
     DEC,
     DEX,
     DEY,
+    EOR,
     SBC,
     LDA,
     TAX,
@@ -150,6 +151,15 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xCA, Mnemonic::DEX, 1, 2, AddressingMode::Implied),
         // DEY
         OpCode::new(0x88, Mnemonic::DEY, 1, 2, AddressingMode::Implied),
+        // EOR
+        OpCode::new(0x49, Mnemonic::EOR, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x45, Mnemonic::EOR, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x55, Mnemonic::EOR, 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x4D, Mnemonic::EOR, 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x5D, Mnemonic::EOR, 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0x59, Mnemonic::EOR, 3, 4, AddressingMode::Absolute_Y),
+        OpCode::new(0x41, Mnemonic::EOR, 2, 6, AddressingMode::Indirect_X),
+        OpCode::new(0x51, Mnemonic::EOR, 2, 5, AddressingMode::Indirect_Y),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -521,6 +531,18 @@ impl CPU {
         result
     }
 
+    fn eor(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        self.register_a ^= value;
+        self.status = match self.register_a {
+            0 => self.status | status_flag::ZERO,
+            x if (x & status_flag::NEGATIVE) != 0 => self.status | status_flag::NEGATIVE,
+            _ => self.status,
+        }
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -612,6 +634,7 @@ impl CPU {
                 Mnemonic::DEC => self.dec(&opcode.mode),
                 Mnemonic::DEX => self.dex(),
                 Mnemonic::DEY => self.dey(),
+                Mnemonic::EOR => self.eor(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1663,6 +1686,50 @@ mod test {
         assert_eq!(cpu.program_counter, before + 2);
         assert_eq!(cpu.status, status_flag::NEGATIVE);
         assert_eq!(cpu.register_y, 0xFF);
+    }
+
+    #[test]
+    fn test_eor_immediate_xor() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x49, 0x05]);
+        cpu.reset();
+
+        cpu.register_a = 0x04;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.register_a, 0x05 ^ 0x04);
+    }
+
+    #[test]
+    fn test_eor_immediate_xor_with_zero_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x49, 0x05]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::ZERO);
+        assert_eq!(cpu.register_a, 0x05 ^ 0x05);
+    }
+
+    #[test]
+    fn test_eor_immediate_xor_with_negative_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x49, 0x05]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::ZERO);
+        assert_eq!(cpu.register_a, 0x05 ^ 0x05);
     }
 
     #[test]
