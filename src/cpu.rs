@@ -129,6 +129,17 @@ pub fn get_opcodes() -> Vec<OpCode> {
     ]
 }
 
+#[allow(dead_code)]
+mod status_flag {
+    pub const CARRY: u8 = 0b0000_0001;
+    pub const ZERO: u8 = 0b0000_0010;
+    pub const INTERRUPT: u8 = 0b0000_0100;
+    pub const DECIMAL: u8 = 0b0000_1000;
+    pub const BREAK: u8 = 0b0001_0000;
+    pub const OVERFLOW: u8 = 0b0100_0000;
+    pub const NEGATIVE: u8 = 0b1000_0000;
+}
+
 pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
@@ -255,20 +266,24 @@ impl CPU {
 
     fn add_with_carry(&mut self, value: u8) {
         let a = self.register_a;
-        let c = if self.status & 0b0000_0001 != 0 { 1 } else { 0 };
+        let c = if self.status & status_flag::CARRY != 0 {
+            1
+        } else {
+            0
+        };
 
         let sum = (a as u16) + (value as u16) + (c as u16);
 
         if sum > 0xFF {
-            self.status |= 0b0000_0001;
+            self.status |= status_flag::CARRY;
         } else {
-            self.status &= !0b0000_0001;
+            self.status &= !status_flag::CARRY;
         }
 
         self.register_a = sum as u8;
 
         if ((a ^ self.register_a) & (value ^ self.register_a) & 0x80) != 0 {
-            self.status = self.status | 0b0100_0000;
+            self.status = self.status | status_flag::OVERFLOW;
         } else {
             self.status = self.status | 0b0000_0000;
         }
@@ -303,7 +318,7 @@ impl CPU {
     }
 
     fn bcc(&mut self, mode: &AddressingMode) {
-        if self.status & 0b0000_0001 != 0 {
+        if self.status & status_flag::CARRY != 0 {
             return;
         }
 
@@ -311,7 +326,7 @@ impl CPU {
     }
 
     fn bcs(&mut self, mode: &AddressingMode) {
-        if self.status & 0b0000_0001 == 0 {
+        if self.status & status_flag::CARRY == 0 {
             return;
         }
 
@@ -319,7 +334,7 @@ impl CPU {
     }
 
     fn beq(&mut self, mode: &AddressingMode) {
-        if self.status & 0b0000_0010 == 0 {
+        if self.status & status_flag::ZERO == 0 {
             return;
         }
 
@@ -333,16 +348,16 @@ impl CPU {
         let n = value & 0x40;
 
         if self.register_a & value == 0 {
-            self.status |= 0b0000_0010;
+            self.status |= status_flag::ZERO;
         } else {
-            self.status &= 0b1111_1101;
+            self.status &= !status_flag::ZERO;
         }
         self.status |= v;
         self.status |= n;
     }
 
     fn bmi(&mut self, mode: &AddressingMode) {
-        if self.status & 0b1000_0000 == 0 {
+        if self.status & status_flag::NEGATIVE == 0 {
             return;
         }
 
@@ -350,7 +365,7 @@ impl CPU {
     }
 
     fn bne(&mut self, mode: &AddressingMode) {
-        if self.status & 0b0000_0010 != 0 {
+        if self.status & status_flag::ZERO != 0 {
             return;
         }
 
@@ -358,7 +373,7 @@ impl CPU {
     }
 
     fn bpl(&mut self, mode: &AddressingMode) {
-        if self.status & 0b1000_0000 != 0 {
+        if self.status & status_flag::NEGATIVE != 0 {
             return;
         }
 
@@ -366,7 +381,7 @@ impl CPU {
     }
 
     fn bvc(&mut self, mode: &AddressingMode) {
-        if self.status & 0b0100_0000 != 0 {
+        if self.status & status_flag::OVERFLOW != 0 {
             return;
         }
 
@@ -374,7 +389,7 @@ impl CPU {
     }
 
     fn bvs(&mut self, mode: &AddressingMode) {
-        if self.status & 0b0100_0000 == 0 {
+        if self.status & status_flag::OVERFLOW == 0 {
             return;
         }
 
@@ -423,17 +438,17 @@ impl CPU {
 
     fn update_zero_flag(&mut self, result: u8) {
         if result == 0 {
-            self.status = self.status | 0b0000_0010;
+            self.status = self.status | status_flag::ZERO;
         } else {
-            self.status = self.status & 0b1111_1101;
+            self.status = self.status & !status_flag::ZERO;
         }
     }
 
     fn update_negative_flag(&mut self, result: u8) {
         if result & 0b1000_0000 != 0 {
-            self.status = self.status | 0b1000_0000;
+            self.status = self.status | status_flag::NEGATIVE;
         } else {
-            self.status = self.status & 0b0111_1111;
+            self.status = self.status & !status_flag::NEGATIVE;
         }
     }
 
@@ -489,15 +504,15 @@ mod test {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x05, 0x00]);
         assert_eq!(cpu.register_a, 0x05);
-        assert!(cpu.status & 0b0000_0010 == 0b00);
-        assert!(cpu.status & 0b1000_0000 == 0);
+        assert!(cpu.status & status_flag::ZERO == 0b00);
+        assert!(cpu.status & status_flag::NEGATIVE == 0);
     }
 
     #[test]
     fn test_0xa9_lda_zero_flag() {
         let mut cpu = CPU::new();
         cpu.load_and_run(vec![0xa9, 0x00, 0x00]);
-        assert!(cpu.status & 0b0000_0010 == 0b10);
+        assert!(cpu.status & status_flag::ZERO == 0b10);
     }
 
     #[test]
@@ -570,7 +585,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0x80);
         // Flags: N=1, V=1, Z=0, C=0
-        assert_eq!(cpu.status, 0b1100_0000);
+        assert_eq!(cpu.status, status_flag::NEGATIVE + status_flag::OVERFLOW);
     }
 
     #[test]
@@ -586,7 +601,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0xFD);
         // Flags: N=1, V=0, Z=0, C=1
-        assert_eq!(cpu.status, 0b1000_0001);
+        assert_eq!(cpu.status, status_flag::NEGATIVE + status_flag::CARRY);
     }
 
     #[test]
@@ -602,7 +617,10 @@ mod test {
 
         assert_eq!(cpu.register_a, 0x00);
         // Flags: N=0, V=1, Z=1, C=1
-        assert_eq!(cpu.status, 0b0100_0011);
+        assert_eq!(
+            cpu.status,
+            status_flag::OVERFLOW + status_flag::ZERO + status_flag::CARRY
+        );
     }
 
     #[test]
@@ -618,7 +636,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0x04);
         // Flags: N=0, V=0, Z=0, C=1
-        assert_eq!(cpu.status, 0b0000_0001);
+        assert_eq!(cpu.status, status_flag::CARRY);
     }
 
     #[test]
@@ -634,7 +652,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0x00);
         // Flags: N=0, V=0, Z=1, C=1
-        assert_eq!(cpu.status, 0b0000_0011);
+        assert_eq!(cpu.status, status_flag::ZERO + status_flag::CARRY);
     }
 
     #[test]
@@ -650,7 +668,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0xFF);
         // Flags: N=1, V=0, Z=0, C=0
-        assert_eq!(cpu.status, 0b1000_0000);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
     }
 
     #[test]
@@ -817,7 +835,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0b0000_0000);
         // Flags: N=0, Z=1
-        assert_eq!(cpu.status, 0b0000_0010);
+        assert_eq!(cpu.status, status_flag::ZERO);
     }
 
     #[test]
@@ -831,7 +849,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0b1000_0000);
         // Flags: N=1, Z=0
-        assert_eq!(cpu.status, 0b1000_0000);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
     }
 
     #[test]
@@ -859,7 +877,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0b0000_0010);
         // Flags: N=0, Z=0, C=1
-        assert_eq!(cpu.status, 0b0000_0001);
+        assert_eq!(cpu.status, status_flag::CARRY);
     }
 
     #[test]
@@ -873,7 +891,7 @@ mod test {
 
         assert_eq!(cpu.register_a, 0b1000_0000);
         // Flags: N=1, Z=0, C=0
-        assert_eq!(cpu.status, 0b1000_0000);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
     }
 
     #[test]
@@ -911,7 +929,7 @@ mod test {
         cpu.reset();
 
         let before = cpu.program_counter;
-        cpu.status = 0b0000_0001;
+        cpu.status = status_flag::CARRY;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
@@ -924,7 +942,7 @@ mod test {
         cpu.reset();
 
         let before = cpu.program_counter;
-        cpu.status = 0b0000_0001;
+        cpu.status = status_flag::CARRY;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 0x08);
@@ -949,7 +967,7 @@ mod test {
         cpu.reset();
 
         let before = cpu.program_counter;
-        cpu.status = 0b0000_0010;
+        cpu.status = status_flag::ZERO;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 0x08);
@@ -978,7 +996,7 @@ mod test {
         cpu.run();
 
         // Flags: N=1, V=0, Z=0
-        assert_eq!(cpu.status, 0b1000_0000)
+        assert_eq!(cpu.status, status_flag::NEGATIVE)
     }
 
     #[test]
@@ -992,7 +1010,7 @@ mod test {
         cpu.run();
 
         // Flags: N=0, V=1, Z=1
-        assert_eq!(cpu.status, 0b0100_0010)
+        assert_eq!(cpu.status, status_flag::OVERFLOW + status_flag::ZERO)
     }
 
     #[test]
@@ -1006,7 +1024,7 @@ mod test {
         cpu.run();
 
         // Flags: N=1, V=0, Z=0
-        assert_eq!(cpu.status, 0b1000_0000)
+        assert_eq!(cpu.status, status_flag::NEGATIVE)
     }
 
     #[test]
@@ -1020,7 +1038,7 @@ mod test {
         cpu.run();
 
         // Flags: N=0, V=1, Z=1
-        assert_eq!(cpu.status, 0b0100_0010)
+        assert_eq!(cpu.status, status_flag::OVERFLOW + status_flag::ZERO)
     }
 
     #[test]
@@ -1067,7 +1085,7 @@ mod test {
         cpu.reset();
 
         let before = cpu.program_counter;
-        cpu.status = 0b0000_0010;
+        cpu.status = status_flag::ZERO;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
@@ -1092,7 +1110,7 @@ mod test {
         cpu.reset();
 
         let before = cpu.program_counter;
-        cpu.status = 0b1000_0000;
+        cpu.status = status_flag::NEGATIVE;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
@@ -1117,7 +1135,7 @@ mod test {
         cpu.reset();
 
         let before = cpu.program_counter;
-        cpu.status = 0b0100_0000;
+        cpu.status = status_flag::OVERFLOW;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
@@ -1130,7 +1148,7 @@ mod test {
         cpu.reset();
 
         let before = cpu.program_counter;
-        cpu.status = 0b0100_0000;
+        cpu.status = status_flag::OVERFLOW;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 0x08)
@@ -1157,12 +1175,12 @@ mod test {
         cpu.reset();
 
         cpu.register_a = 0x05;
-        cpu.status = 0b0000_0001;
+        cpu.status = status_flag::CARRY;
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x02);
         // Flags: N=0, V=0, Z=0, C=1
-        assert_eq!(cpu.status, 0b0000_0001);
+        assert_eq!(cpu.status, status_flag::CARRY);
     }
 
     #[test]
@@ -1174,12 +1192,12 @@ mod test {
         cpu.reset();
 
         cpu.register_a = 0x03;
-        cpu.status = 0b0000_0001;
+        cpu.status = status_flag::CARRY;
         cpu.run();
 
         assert_eq!(cpu.register_a, 0xFE);
         // Flags: N=1, V=0, Z=0, C=0
-        assert_eq!(cpu.status, 0b1000_0000);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
     }
 
     #[test]
@@ -1191,12 +1209,12 @@ mod test {
         cpu.reset();
 
         cpu.register_a = 0x7F;
-        cpu.status = 0b0000_0001;
+        cpu.status = status_flag::CARRY;
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x81);
         // Flags: N=1, V=1, Z=0, C=0
-        assert_eq!(cpu.status, 0b1100_0000);
+        assert_eq!(cpu.status, status_flag::NEGATIVE + status_flag::OVERFLOW);
     }
 
     #[test]
@@ -1208,12 +1226,12 @@ mod test {
         cpu.reset();
 
         cpu.register_a = 0x80;
-        cpu.status = 0b0000_0001;
+        cpu.status = status_flag::CARRY;
         cpu.run();
 
         assert_eq!(cpu.register_a, 0x7F);
         // Flags: N=0, V=1, Z=0, C=1
-        assert_eq!(cpu.status, 0b0100_0001);
+        assert_eq!(cpu.status, status_flag::OVERFLOW + status_flag::CARRY);
     }
 
     #[test]
@@ -1230,6 +1248,6 @@ mod test {
 
         assert_eq!(cpu.register_a, 0x01);
         // Flags: N=0, V=0, Z=0, C=1
-        assert_eq!(cpu.status, 0b0000_0001);
+        assert_eq!(cpu.status, status_flag::CARRY);
     }
 }
