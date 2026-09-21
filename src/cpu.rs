@@ -450,17 +450,17 @@ impl CPU {
     fn cmp(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        self.status |= match self.register_a.cmp(&value) {
-            Ordering::Greater => status_flag::CARRY,
-            Ordering::Equal => status_flag::ZERO + status_flag::CARRY,
-            Ordering::Less => status_flag::NEGATIVE,
-        }
+        self.status |= self.compare(self.register_a, value);
     }
 
     fn cpx(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
-        self.status |= match self.register_x.cmp(&value) {
+        self.status |= self.compare(self.register_x, value);
+    }
+
+    fn compare(&mut self, left: u8, right: u8) -> u8 {
+        match left.cmp(&right) {
             Ordering::Greater => status_flag::CARRY,
             Ordering::Equal => status_flag::ZERO + status_flag::CARRY,
             Ordering::Less => status_flag::NEGATIVE,
