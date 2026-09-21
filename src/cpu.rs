@@ -1,3 +1,5 @@
+use std::cmp::Ordering;
+
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
 pub enum AddressingMode {
@@ -34,6 +36,7 @@ pub enum Mnemonic {
     CLD,
     CLI,
     CLV,
+    CMP,
     SBC,
     LDA,
     TAX,
@@ -116,6 +119,15 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x58, Mnemonic::CLI, 1, 2, AddressingMode::Implied),
         // CLV
         OpCode::new(0xB8, Mnemonic::CLV, 1, 2, AddressingMode::Implied),
+        // CMP
+        OpCode::new(0xC9, Mnemonic::CMP, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xC5, Mnemonic::CMP, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xD5, Mnemonic::CMP, 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0xCD, Mnemonic::CMP, 3, 4, AddressingMode::Absolute),
+        OpCode::new(0xDD, Mnemonic::CMP, 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0xD9, Mnemonic::CMP, 3, 4, AddressingMode::Absolute_Y),
+        OpCode::new(0xC1, Mnemonic::CMP, 2, 6, AddressingMode::Indirect_X),
+        OpCode::new(0xD1, Mnemonic::CMP, 2, 5, AddressingMode::Indirect_Y),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -430,6 +442,16 @@ impl CPU {
         self.status &= !status_flag::OVERFLOW;
     }
 
+    fn cmp(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.status |= match self.register_a.cmp(&value) {
+            Ordering::Greater => status_flag::CARRY,
+            Ordering::Equal => status_flag::ZERO + status_flag::CARRY,
+            Ordering::Less => status_flag::NEGATIVE,
+        }
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -515,6 +537,7 @@ impl CPU {
                 Mnemonic::CLD => self.cld(),
                 Mnemonic::CLI => self.cli(),
                 Mnemonic::CLV => self.clv(),
+                Mnemonic::CMP => self.cmp(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1308,6 +1331,48 @@ mod test {
 
         assert_eq!(cpu.program_counter, before + 2);
         assert_eq!(cpu.status, status_flag::NEGATIVE + status_flag::ZERO);
+    }
+
+    #[test]
+    fn test_cmp_immediate_set_carry_flag_with_a_is_greater_than_m() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC9, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.register_a = 0x06;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::CARRY);
+    }
+
+    #[test]
+    fn test_cmp_immediate_set_carry_flag_and_zero_flag_with_a_is_equal_to_m() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC9, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.register_a = 0x05;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::ZERO + status_flag::CARRY);
+    }
+
+    #[test]
+    fn test_cmp_immediate_set_negative_flag_with_a_is_smaller_than_m() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC9, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.register_a = 0x04;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
     }
 
     #[test]
