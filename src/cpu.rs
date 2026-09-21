@@ -33,6 +33,7 @@ pub enum Mnemonic {
     CLC,
     CLD,
     CLI,
+    CLV,
     SBC,
     LDA,
     TAX,
@@ -113,6 +114,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xD8, Mnemonic::CLD, 1, 2, AddressingMode::Implied),
         // CLI
         OpCode::new(0x58, Mnemonic::CLI, 1, 2, AddressingMode::Implied),
+        // CLV
+        OpCode::new(0xB8, Mnemonic::CLV, 1, 2, AddressingMode::Implied),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -423,6 +426,10 @@ impl CPU {
         self.status &= !status_flag::INTERRUPT;
     }
 
+    fn clv(&mut self) {
+        self.status &= !status_flag::OVERFLOW;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -507,6 +514,7 @@ impl CPU {
                 Mnemonic::CLC => self.clc(),
                 Mnemonic::CLD => self.cld(),
                 Mnemonic::CLI => self.cli(),
+                Mnemonic::CLV => self.clv(),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1268,6 +1276,34 @@ mod test {
 
         let before = cpu.program_counter;
         cpu.status = status_flag::NEGATIVE + status_flag::INTERRUPT + status_flag::ZERO;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::NEGATIVE + status_flag::ZERO);
+    }
+
+    #[test]
+    fn test_clv_implied_clear_overflow_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xB8]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.status = status_flag::OVERFLOW;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_clv_implied_clear_only_overflow_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xB8]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.status = status_flag::NEGATIVE + status_flag::OVERFLOW + status_flag::ZERO;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 2);
