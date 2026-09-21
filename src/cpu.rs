@@ -524,7 +524,7 @@ impl CPU {
 
     fn decrement(&mut self, value: u8) -> u8 {
         let result = match value {
-            0 => u8::MAX,
+            u8::MIN => u8::MAX,
             _ => value - 1,
         };
 
