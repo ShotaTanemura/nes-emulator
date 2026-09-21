@@ -1,4 +1,4 @@
-use std::cmp::Ordering;
+use std::{cmp::Ordering, u8};
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
@@ -39,6 +39,7 @@ pub enum Mnemonic {
     CMP,
     CPX,
     CPY,
+    DEC,
     SBC,
     LDA,
     TAX,
@@ -138,6 +139,11 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xC0, Mnemonic::CPY, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xC4, Mnemonic::CPY, 2, 3, AddressingMode::ZeroPage),
         OpCode::new(0xCC, Mnemonic::CPY, 3, 4, AddressingMode::Absolute),
+        // DEC
+        OpCode::new(0xC6, Mnemonic::DEC, 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0xD6, Mnemonic::DEC, 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0xCE, Mnemonic::DEC, 3, 6, AddressingMode::Absolute),
+        OpCode::new(0xDE, Mnemonic::DEC, 3, 7, AddressingMode::Absolute_X),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -478,6 +484,22 @@ impl CPU {
         }
     }
 
+    fn dec(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        let result = match value {
+            0 => u8::MAX,
+            _ => value - 1,
+        };
+
+        self.mem_write(addr, result);
+        self.status = match result {
+            0 => self.status | status_flag::ZERO,
+            x if (x & status_flag::NEGATIVE) != 0 => self.status | status_flag::NEGATIVE,
+            _ => self.status,
+        }
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -566,6 +588,7 @@ impl CPU {
                 Mnemonic::CMP => self.cmp(&opcode.mode),
                 Mnemonic::CPX => self.cpx(&opcode.mode),
                 Mnemonic::CPY => self.cpy(&opcode.mode),
+                Mnemonic::DEC => self.dec(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1485,6 +1508,50 @@ mod test {
 
         assert_eq!(cpu.program_counter, before + 3);
         assert_eq!(cpu.status, status_flag::NEGATIVE);
+    }
+
+    #[test]
+    fn test_dec_zeropage_subtract_one_from_m() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC6, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write(0x05, 0x02);
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.mem_read(0x05), 0x01);
+    }
+
+    #[test]
+    fn test_dec_zeropage_subtract_one_from_m_with_zero_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC6, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write(0x05, 0x01);
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::ZERO);
+        assert_eq!(cpu.mem_read(0x05), 0x00);
+    }
+
+    #[test]
+    fn test_dec_zeropage_subtract_one_from_m_with_negative_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xC6, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write(0x05, 0x00);
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
+        assert_eq!(cpu.mem_read(0x05), 0xFF);
     }
 
     #[test]
