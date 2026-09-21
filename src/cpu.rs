@@ -30,6 +30,7 @@ pub enum Mnemonic {
     BPL,
     BVC,
     BVS,
+    CLC,
     SBC,
     LDA,
     TAX,
@@ -104,6 +105,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x50, Mnemonic::BVC, 2, 2, AddressingMode::Relative),
         // BVS
         OpCode::new(0x70, Mnemonic::BVS, 2, 2, AddressingMode::Relative),
+        // CLC
+        OpCode::new(0x18, Mnemonic::CLC, 1, 2, AddressingMode::Implied),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -402,6 +405,10 @@ impl CPU {
         self.program_counter += value;
     }
 
+    fn clc(&mut self) {
+        self.status &= !status_flag::CARRY;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -483,6 +490,7 @@ impl CPU {
                 Mnemonic::BPL => self.bpl(&opcode.mode),
                 Mnemonic::BVC => self.bvc(&opcode.mode),
                 Mnemonic::BVS => self.bvs(&opcode.mode),
+                Mnemonic::CLC => self.clc(),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1164,6 +1172,34 @@ mod test {
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3)
+    }
+
+    #[test]
+    fn test_clc_implied_clear_carry_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x18]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.status = status_flag::CARRY;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_clc_implied_clear_only_carry_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x18]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.status = status_flag::NEGATIVE + status_flag::ZERO + status_flag::CARRY;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::NEGATIVE + status_flag::ZERO);
     }
 
     #[test]
