@@ -37,6 +37,7 @@ pub enum Mnemonic {
     CLI,
     CLV,
     CMP,
+    CPX,
     SBC,
     LDA,
     TAX,
@@ -128,6 +129,10 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xD9, Mnemonic::CMP, 3, 4, AddressingMode::Absolute_Y),
         OpCode::new(0xC1, Mnemonic::CMP, 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0xD1, Mnemonic::CMP, 2, 5, AddressingMode::Indirect_Y),
+        // CPX
+        OpCode::new(0xE0, Mnemonic::CPX, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xE4, Mnemonic::CPX, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xEC, Mnemonic::CPX, 3, 4, AddressingMode::Absolute),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -452,6 +457,16 @@ impl CPU {
         }
     }
 
+    fn cpx(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        self.status |= match self.register_x.cmp(&value) {
+            Ordering::Greater => status_flag::CARRY,
+            Ordering::Equal => status_flag::ZERO + status_flag::CARRY,
+            Ordering::Less => status_flag::NEGATIVE,
+        }
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -538,6 +553,7 @@ impl CPU {
                 Mnemonic::CLI => self.cli(),
                 Mnemonic::CLV => self.clv(),
                 Mnemonic::CMP => self.cmp(&opcode.mode),
+                Mnemonic::CPX => self.cpx(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1369,6 +1385,48 @@ mod test {
 
         let before = cpu.program_counter;
         cpu.register_a = 0x04;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
+    }
+
+    #[test]
+    fn test_cpx_immediate_set_carry_flag_with_x_is_greater_than_m() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xE0, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.register_x = 0x06;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::CARRY);
+    }
+
+    #[test]
+    fn test_cpx_immediate_set_carry_flag_and_zero_flag_with_x_is_equal_to_m() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xE0, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.register_x = 0x05;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 3);
+        assert_eq!(cpu.status, status_flag::ZERO + status_flag::CARRY);
+    }
+
+    #[test]
+    fn test_cpx_immediate_set_negative_flag_with_x_is_smaller_than_m() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xE0, 0x05]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.register_x = 0x04;
         cpu.run();
 
         assert_eq!(cpu.program_counter, before + 3);
