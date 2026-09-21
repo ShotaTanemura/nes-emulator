@@ -41,6 +41,7 @@ pub enum Mnemonic {
     CPY,
     DEC,
     DEX,
+    DEY,
     SBC,
     LDA,
     TAX,
@@ -147,6 +148,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xDE, Mnemonic::DEC, 3, 7, AddressingMode::Absolute_X),
         // DEX
         OpCode::new(0xCA, Mnemonic::DEX, 1, 2, AddressingMode::Implied),
+        // DEY
+        OpCode::new(0x88, Mnemonic::DEY, 1, 2, AddressingMode::Implied),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -499,6 +502,10 @@ impl CPU {
         self.register_x = self.decrement(self.register_x)
     }
 
+    fn dey(&mut self) {
+        self.register_y = self.decrement(self.register_y)
+    }
+
     fn decrement(&mut self, value: u8) -> u8 {
         let result = match value {
             0 => u8::MAX,
@@ -604,6 +611,7 @@ impl CPU {
                 Mnemonic::CPY => self.cpy(&opcode.mode),
                 Mnemonic::DEC => self.dec(&opcode.mode),
                 Mnemonic::DEX => self.dex(),
+                Mnemonic::DEY => self.dey(),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
@@ -1611,6 +1619,50 @@ mod test {
         assert_eq!(cpu.program_counter, before + 2);
         assert_eq!(cpu.status, status_flag::NEGATIVE);
         assert_eq!(cpu.register_x, 0xFF);
+    }
+
+    #[test]
+    fn test_dey_implied_subtract_one_from_y() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x88]);
+        cpu.reset();
+
+        cpu.register_y = 0x02;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.register_y, 0x01);
+    }
+
+    #[test]
+    fn test_dey_implied_subtract_one_from_y_with_zero_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x88]);
+        cpu.reset();
+
+        cpu.register_y = 0x01;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::ZERO);
+        assert_eq!(cpu.register_y, 0x00);
+    }
+
+    #[test]
+    fn test_dey_implied_subtract_one_from_y_with_negative_flag() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x88]);
+        cpu.reset();
+
+        cpu.register_y = 0x00;
+        let before = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, before + 2);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
+        assert_eq!(cpu.register_y, 0xFF);
     }
 
     #[test]
