@@ -1,4 +1,4 @@
-use std::{cmp::Ordering, u8};
+use std::cmp::Ordering;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 #[allow(non_camel_case_types)]
@@ -490,30 +490,28 @@ impl CPU {
     fn dec(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = self.mem_read(addr);
+
+        let result = self.decrement(value);
+        self.mem_write(addr, result)
+    }
+
+    fn dex(&mut self) {
+        self.register_x = self.decrement(self.register_x)
+    }
+
+    fn decrement(&mut self, value: u8) -> u8 {
         let result = match value {
             0 => u8::MAX,
             _ => value - 1,
         };
 
-        self.mem_write(addr, result);
         self.status = match result {
             0 => self.status | status_flag::ZERO,
             x if (x & status_flag::NEGATIVE) != 0 => self.status | status_flag::NEGATIVE,
             _ => self.status,
-        }
-    }
-
-    fn dex(&mut self) {
-        self.register_x = match self.register_x {
-            0 => u8::MAX,
-            _ => self.register_x - 1,
         };
 
-        self.status = match self.register_x {
-            0 => self.status | status_flag::ZERO,
-            x if (x & status_flag::NEGATIVE) != 0 => self.status | status_flag::NEGATIVE,
-            _ => self.status,
-        }
+        result
     }
 
     fn sbc(&mut self, mode: &AddressingMode) {
