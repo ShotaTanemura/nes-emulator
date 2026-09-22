@@ -11,6 +11,7 @@ pub enum AddressingMode {
     Absolute,
     Absolute_X,
     Absolute_Y,
+    Indirect,
     Indirect_X,
     Indirect_Y,
     Accumulator,
@@ -46,6 +47,7 @@ pub enum Mnemonic {
     INC,
     INX,
     INY,
+    JMP,
     SBC,
     LDA,
     TAX,
@@ -171,6 +173,9 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xE8, Mnemonic::INX, 1, 2, AddressingMode::Implied),
         // INY
         OpCode::new(0xC8, Mnemonic::INY, 1, 2, AddressingMode::Implied),
+        // JMP
+        OpCode::new(0x4C, Mnemonic::JMP, 3, 3, AddressingMode::Absolute),
+        OpCode::new(0x6C, Mnemonic::JMP, 3, 5, AddressingMode::Indirect),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -258,6 +263,11 @@ impl CPU {
             AddressingMode::Absolute_Y => {
                 let base = self.mem_read_u16(self.program_counter);
                 let addr = base.wrapping_add(self.register_y as u16);
+                addr
+            }
+            AddressingMode::Indirect => {
+                let pos = self.mem_read_u16(self.program_counter);
+                let addr = self.mem_read_u16(pos);
                 addr
             }
             AddressingMode::Indirect_X => {
@@ -585,6 +595,11 @@ impl CPU {
         result
     }
 
+    fn jmp(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        self.program_counter = addr;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -673,6 +688,7 @@ impl CPU {
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
                 Mnemonic::INY => self.iny(),
+                Mnemonic::JMP => self.jmp(&opcode.mode),
                 Mnemonic::STA => self.sta(&opcode.mode),
                 Mnemonic::BRK => return,
             }
@@ -1853,6 +1869,33 @@ mod test {
         assert_eq!(cpu.program_counter, before + 2);
         assert_eq!(cpu.status, status_flag::NEGATIVE);
         assert_eq!(cpu.register_y, 0xFF);
+    }
+
+    #[test]
+    fn test_jmp_absolute() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x4C, 0x34, 0x12]);
+        cpu.reset();
+
+        cpu.mem_write(0x1234 + 3, 0x05);
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, 0x1234 + 3);
+        assert_eq!(cpu.mem_read(cpu.program_counter), 0x05);
+    }
+
+    #[test]
+    fn test_jmp_indirect() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x6C, 0x34, 0x12]);
+        cpu.reset();
+
+        cpu.mem_write_u16(0x1234, 0x2468);
+        cpu.mem_write(0x2468 + 3, 0x05);
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, 0x2468 + 3);
+        assert_eq!(cpu.mem_read(cpu.program_counter), 0x05);
     }
 
     #[test]
