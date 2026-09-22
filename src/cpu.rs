@@ -48,6 +48,7 @@ pub enum Mnemonic {
     INX,
     INY,
     JMP,
+    JSR,
     SBC,
     LDA,
     TAX,
@@ -176,6 +177,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         // JMP
         OpCode::new(0x4C, Mnemonic::JMP, 3, 3, AddressingMode::Absolute),
         OpCode::new(0x6C, Mnemonic::JMP, 3, 5, AddressingMode::Indirect),
+        // JSR
+        OpCode::new(0x20, Mnemonic::JSR, 3, 6, AddressingMode::Absolute),
         // SBC
         OpCode::new(0xE9, Mnemonic::SBC, 2, 2, AddressingMode::Immediate),
         OpCode::new(0xE5, Mnemonic::SBC, 2, 3, AddressingMode::ZeroPage),
@@ -216,6 +219,7 @@ pub struct CPU {
     pub register_a: u8,
     pub register_x: u8,
     pub register_y: u8,
+    pub register_sp: u8,
     pub status: u8,
     pub program_counter: u16,
     pub instructions: [Option<OpCode>; 256],
@@ -232,6 +236,7 @@ impl CPU {
             register_a: 0,
             register_x: 0,
             register_y: 0,
+            register_sp: 0,
             status: 0,
             program_counter: 0,
             instructions: instructions,
@@ -332,6 +337,19 @@ impl CPU {
 
     fn mem_write(&mut self, addr: u16, data: u8) {
         self.memory[addr as usize] = data;
+    }
+
+    fn push_stack(&mut self, data: u8) {
+        let addr = 0x0100 + self.register_sp as u16;
+        self.mem_write(addr, data);
+        self.register_sp += 1;
+    }
+
+    fn pull_stack(&mut self) -> u8 {
+        self.register_sp -= 1;
+
+        let addr = 0x0100 + self.register_sp as u16;
+        self.mem_read(addr)
     }
 
     fn adc(&mut self, mode: &AddressingMode) {
@@ -600,6 +618,15 @@ impl CPU {
         self.program_counter = addr;
     }
 
+    fn jsr(&mut self, mode: &AddressingMode) {
+        let bytes = (self.program_counter + 1).to_le_bytes();
+        self.push_stack(bytes[1]);
+        self.push_stack(bytes[0]);
+
+        let addr = self.get_operand_address(mode);
+        self.program_counter = addr;
+    }
+
     fn sbc(&mut self, mode: &AddressingMode) {
         let addr = self.get_operand_address(mode);
         let value = !self.mem_read(addr);
@@ -689,6 +716,7 @@ impl CPU {
                 Mnemonic::INX => self.inx(),
                 Mnemonic::INY => self.iny(),
                 Mnemonic::JMP => self.jmp(&opcode.mode),
+                Mnemonic::JSR => self.jsr(&opcode.mode),
                 Mnemonic::STA => self.sta(&opcode.mode),
                 Mnemonic::BRK => return,
             }
@@ -1895,6 +1923,24 @@ mod test {
         cpu.run();
 
         assert_eq!(cpu.program_counter, 0x2468 + 3);
+        assert_eq!(cpu.mem_read(cpu.program_counter), 0x05);
+    }
+
+    #[test]
+    fn test_jsr_absolute() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x20, 0x34, 0x12]);
+        cpu.reset();
+
+        let before = cpu.program_counter;
+        cpu.mem_write(0x1234 + 3, 0x05);
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, 0x1234 + 3);
+        assert_eq!(
+            [cpu.pull_stack(), cpu.pull_stack()],
+            (before + 2).to_le_bytes()
+        );
         assert_eq!(cpu.mem_read(cpu.program_counter), 0x05);
     }
 
