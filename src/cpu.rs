@@ -52,6 +52,7 @@ pub enum Mnemonic {
     SBC,
     LDA,
     LDX,
+    LDY,
     TAX,
     STA,
     BRK,
@@ -199,6 +200,12 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xB6, Mnemonic::LDX, 2, 4, AddressingMode::ZeroPage_Y),
         OpCode::new(0xAE, Mnemonic::LDX, 3, 4, AddressingMode::Absolute),
         OpCode::new(0xBE, Mnemonic::LDX, 3, 4, AddressingMode::Absolute_Y),
+        // LDY
+        OpCode::new(0xA0, Mnemonic::LDY, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0xA4, Mnemonic::LDY, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0xB4, Mnemonic::LDY, 2, 4, AddressingMode::ZeroPage_Y),
+        OpCode::new(0xAC, Mnemonic::LDY, 3, 4, AddressingMode::Absolute),
+        OpCode::new(0xBC, Mnemonic::LDY, 3, 4, AddressingMode::Absolute_Y),
         // TAX
         OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Implied),
         // BRK
@@ -657,6 +664,14 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_x);
     }
 
+    fn ldy(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        self.register_y = value;
+        self.update_zero_and_negative_flags(self.register_y);
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -728,6 +743,7 @@ impl CPU {
                 Mnemonic::INC => self.inc(&opcode.mode),
                 Mnemonic::LDA => self.lda(&opcode.mode),
                 Mnemonic::LDX => self.ldx(&opcode.mode),
+                Mnemonic::LDY => self.ldy(&opcode.mode),
                 Mnemonic::TAX => self.tax(),
                 Mnemonic::INX => self.inx(),
                 Mnemonic::INY => self.iny(),
@@ -813,6 +829,17 @@ mod test {
         cpu.run();
 
         assert_eq!(cpu.register_x, 0x10)
+    }
+
+    #[test]
+    fn test_ldy_immediate_from_memory() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xA0, 0x10]);
+        cpu.reset();
+
+        cpu.run();
+
+        assert_eq!(cpu.register_y, 0x10)
     }
 
     #[test]
