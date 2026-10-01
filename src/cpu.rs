@@ -55,6 +55,7 @@ pub enum Mnemonic {
     LDY,
     LSR,
     LSRA,
+    NOP,
     TAX,
     STA,
     BRK,
@@ -214,6 +215,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x56, Mnemonic::LSR, 2, 6, AddressingMode::ZeroPage_X),
         OpCode::new(0x4E, Mnemonic::LSR, 3, 6, AddressingMode::Absolute),
         OpCode::new(0x5E, Mnemonic::LSR, 3, 7, AddressingMode::Absolute_X),
+        // NOP
+        OpCode::new(0xEA, Mnemonic::NOP, 1, 2, AddressingMode::Implied),
         // TAX
         OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Implied),
         // BRK
@@ -705,6 +708,8 @@ impl CPU {
         }
     }
 
+    fn nop(&mut self) {}
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -784,6 +789,7 @@ impl CPU {
                 Mnemonic::JSR => self.jsr(&opcode.mode),
                 Mnemonic::LSRA => self.lsra(),
                 Mnemonic::LSR => self.lsr(&opcode.mode),
+                Mnemonic::NOP => self.nop(),
                 Mnemonic::STA => self.sta(&opcode.mode),
                 Mnemonic::BRK => return,
             }
@@ -2062,6 +2068,18 @@ mod test {
         assert_eq!(cpu.status & status_flag::CARRY, 0b0000_0000);
         assert_eq!(cpu.status & status_flag::ZERO, 0b0000_0000);
         assert_eq!(cpu.status & status_flag::NEGATIVE, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_nop_implied() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0xEA]);
+        cpu.reset();
+
+        let berfore = cpu.program_counter;
+        cpu.run();
+
+        assert_eq!(cpu.program_counter, berfore + 2);
     }
 
     #[test]
