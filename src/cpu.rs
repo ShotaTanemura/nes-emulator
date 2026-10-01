@@ -53,6 +53,8 @@ pub enum Mnemonic {
     LDA,
     LDX,
     LDY,
+    LSR,
+    LSRA,
     TAX,
     STA,
     BRK,
@@ -206,6 +208,12 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0xB4, Mnemonic::LDY, 2, 4, AddressingMode::ZeroPage_Y),
         OpCode::new(0xAC, Mnemonic::LDY, 3, 4, AddressingMode::Absolute),
         OpCode::new(0xBC, Mnemonic::LDY, 3, 4, AddressingMode::Absolute_Y),
+        // LSR
+        OpCode::new(0x4A, Mnemonic::LSRA, 1, 2, AddressingMode::Accumulator),
+        OpCode::new(0x46, Mnemonic::LSR, 2, 5, AddressingMode::ZeroPage),
+        OpCode::new(0x56, Mnemonic::LSR, 2, 6, AddressingMode::ZeroPage_X),
+        OpCode::new(0x4E, Mnemonic::LSR, 3, 6, AddressingMode::Absolute),
+        OpCode::new(0x5E, Mnemonic::LSR, 3, 7, AddressingMode::Absolute_X),
         // TAX
         OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Implied),
         // BRK
@@ -672,6 +680,31 @@ impl CPU {
         self.update_zero_and_negative_flags(self.register_y);
     }
 
+    fn lsra(&mut self) {
+        let carry = self.register_a & status_flag::CARRY;
+        self.register_a = self.register_a >> 1;
+
+        self.status = match self.register_a {
+            0 => self.status | (status_flag::ZERO + carry),
+            x if (x & status_flag::NEGATIVE) != 0 => self.status | (status_flag::NEGATIVE + carry),
+            _ => self.status | carry,
+        }
+    }
+
+    fn lsr(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+        let carry = value & status_flag::CARRY;
+        let result = value >> 1;
+
+        self.mem_write(addr, result);
+        self.status = match result {
+            0 => self.status | (status_flag::ZERO + carry),
+            x if (x & status_flag::NEGATIVE) != 0 => self.status | (status_flag::NEGATIVE + carry),
+            _ => self.status | carry,
+        }
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -749,6 +782,8 @@ impl CPU {
                 Mnemonic::INY => self.iny(),
                 Mnemonic::JMP => self.jmp(&opcode.mode),
                 Mnemonic::JSR => self.jsr(&opcode.mode),
+                Mnemonic::LSRA => self.lsra(),
+                Mnemonic::LSR => self.lsr(&opcode.mode),
                 Mnemonic::STA => self.sta(&opcode.mode),
                 Mnemonic::BRK => return,
             }
@@ -1997,6 +2032,36 @@ mod test {
             (before + 2).to_le_bytes()
         );
         assert_eq!(cpu.mem_read(cpu.program_counter), 0x05);
+    }
+
+    #[test]
+    fn test_lsra_accumulator() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x4A]);
+        cpu.reset();
+
+        cpu.register_a = 0b1000_1101;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b1000_1101 >> 1);
+        assert_eq!(cpu.status & status_flag::CARRY, status_flag::CARRY);
+        assert_eq!(cpu.status & status_flag::ZERO, 0b0000_0000);
+        assert_eq!(cpu.status & status_flag::NEGATIVE, 0b0000_0000);
+    }
+
+    #[test]
+    fn test_lsr_zero_page() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x46, 0x05]);
+        cpu.reset();
+
+        cpu.mem_write(0x05, 0b1010_1010);
+        cpu.run();
+
+        assert_eq!(cpu.mem_read(0x05), 0b1010_1010 >> 1);
+        assert_eq!(cpu.status & status_flag::CARRY, 0b0000_0000);
+        assert_eq!(cpu.status & status_flag::ZERO, 0b0000_0000);
+        assert_eq!(cpu.status & status_flag::NEGATIVE, 0b0000_0000);
     }
 
     #[test]
