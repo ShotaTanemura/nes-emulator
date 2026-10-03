@@ -57,6 +57,7 @@ pub enum Mnemonic {
     LSRA,
     NOP,
     ORA,
+    PHA,
     TAX,
     STA,
     BRK,
@@ -227,6 +228,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x19, Mnemonic::ORA, 3, 4, AddressingMode::Absolute_Y),
         OpCode::new(0x01, Mnemonic::ORA, 2, 6, AddressingMode::Indirect_X),
         OpCode::new(0x11, Mnemonic::ORA, 2, 5, AddressingMode::Indirect_Y),
+        // PHA
+        OpCode::new(0x48, Mnemonic::PHA, 1, 3, AddressingMode::Implied),
         // TAX
         OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Implied),
         // BRK
@@ -734,6 +737,10 @@ impl CPU {
         }
     }
 
+    fn pha(&mut self) {
+        self.push_stack(self.register_a);
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -815,6 +822,7 @@ impl CPU {
                 Mnemonic::LSR => self.lsr(&opcode.mode),
                 Mnemonic::NOP => self.nop(),
                 Mnemonic::ORA => self.ora(&opcode.mode),
+                Mnemonic::PHA => self.pha(),
                 Mnemonic::STA => self.sta(&opcode.mode),
                 Mnemonic::BRK => return,
             }
@@ -2133,6 +2141,18 @@ mod test {
 
         assert_eq!(cpu.register_a, 0b0000_0000);
         assert_eq!(cpu.status, status_flag::ZERO);
+    }
+
+    #[test]
+    fn test_pha_implied() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x48]);
+        cpu.reset();
+
+        cpu.register_a = 0x05;
+        cpu.run();
+
+        assert_eq!(cpu.pull_stack(), 0x05);
     }
 
     #[test]
