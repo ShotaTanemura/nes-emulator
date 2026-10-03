@@ -56,6 +56,7 @@ pub enum Mnemonic {
     LSR,
     LSRA,
     NOP,
+    ORA,
     TAX,
     STA,
     BRK,
@@ -217,6 +218,15 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x5E, Mnemonic::LSR, 3, 7, AddressingMode::Absolute_X),
         // NOP
         OpCode::new(0xEA, Mnemonic::NOP, 1, 2, AddressingMode::Implied),
+        // ORA
+        OpCode::new(0x09, Mnemonic::ORA, 2, 2, AddressingMode::Immediate),
+        OpCode::new(0x05, Mnemonic::ORA, 2, 3, AddressingMode::ZeroPage),
+        OpCode::new(0x15, Mnemonic::ORA, 2, 4, AddressingMode::ZeroPage_X),
+        OpCode::new(0x0D, Mnemonic::ORA, 3, 4, AddressingMode::Absolute),
+        OpCode::new(0x1D, Mnemonic::ORA, 3, 4, AddressingMode::Absolute_X),
+        OpCode::new(0x19, Mnemonic::ORA, 3, 4, AddressingMode::Absolute_Y),
+        OpCode::new(0x01, Mnemonic::ORA, 2, 6, AddressingMode::Indirect_X),
+        OpCode::new(0x11, Mnemonic::ORA, 2, 5, AddressingMode::Indirect_Y),
         // TAX
         OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Implied),
         // BRK
@@ -710,6 +720,20 @@ impl CPU {
 
     fn nop(&mut self) {}
 
+    fn ora(&mut self, mode: &AddressingMode) {
+        let addr = self.get_operand_address(mode);
+        let value = self.mem_read(addr);
+
+        self.register_a |= value;
+        self.status = match self.register_a {
+            0 => (self.status | status_flag::ZERO) & !status_flag::NEGATIVE,
+            x if (x & status_flag::NEGATIVE) != 0 => {
+                (self.status | status_flag::NEGATIVE) & !status_flag::ZERO
+            }
+            _ => self.status,
+        }
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -790,6 +814,7 @@ impl CPU {
                 Mnemonic::LSRA => self.lsra(),
                 Mnemonic::LSR => self.lsr(&opcode.mode),
                 Mnemonic::NOP => self.nop(),
+                Mnemonic::ORA => self.ora(&opcode.mode),
                 Mnemonic::STA => self.sta(&opcode.mode),
                 Mnemonic::BRK => return,
             }
@@ -2080,6 +2105,34 @@ mod test {
         cpu.run();
 
         assert_eq!(cpu.program_counter, berfore + 2);
+    }
+
+    #[test]
+    fn test_ora_immediate_negative() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x09, 0b1000_0000]);
+        cpu.reset();
+
+        cpu.register_a = 0b0000_0000;
+        cpu.status = status_flag::ZERO;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b1000_0000);
+        assert_eq!(cpu.status, status_flag::NEGATIVE)
+    }
+
+    #[test]
+    fn test_ora_immediate_zero() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x09, 0b0000_0000]);
+        cpu.reset();
+
+        cpu.register_a = 0b0000_0000;
+        cpu.status = status_flag::NEGATIVE;
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b0000_0000);
+        assert_eq!(cpu.status, status_flag::ZERO);
     }
 
     #[test]
