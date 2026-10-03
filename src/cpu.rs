@@ -59,6 +59,7 @@ pub enum Mnemonic {
     ORA,
     PHA,
     PHP,
+    PLA,
     TAX,
     STA,
     BRK,
@@ -233,6 +234,8 @@ pub fn get_opcodes() -> Vec<OpCode> {
         OpCode::new(0x48, Mnemonic::PHA, 1, 3, AddressingMode::Implied),
         // PHP
         OpCode::new(0x08, Mnemonic::PHP, 1, 3, AddressingMode::Implied),
+        // PLA
+        OpCode::new(0x68, Mnemonic::PLA, 1, 4, AddressingMode::Implied),
         // TAX
         OpCode::new(0xAA, Mnemonic::TAX, 1, 2, AddressingMode::Implied),
         // BRK
@@ -748,6 +751,18 @@ impl CPU {
         self.push_stack(self.status);
     }
 
+    fn pla(&mut self) {
+        self.register_a = self.pull_stack();
+
+        self.status = match self.register_a {
+            0 => (self.status | status_flag::ZERO) & !status_flag::NEGATIVE,
+            x if (x & status_flag::NEGATIVE) != 0 => {
+                (self.status | status_flag::NEGATIVE) & !status_flag::ZERO
+            }
+            _ => self.status,
+        }
+    }
+
     fn tax(&mut self) {
         self.register_x = self.register_a;
         self.update_zero_and_negative_flags(self.register_x);
@@ -831,6 +846,7 @@ impl CPU {
                 Mnemonic::ORA => self.ora(&opcode.mode),
                 Mnemonic::PHA => self.pha(),
                 Mnemonic::PHP => self.php(),
+                Mnemonic::PLA => self.pla(),
                 Mnemonic::STA => self.sta(&opcode.mode),
                 Mnemonic::BRK => return,
             }
@@ -2172,6 +2188,19 @@ mod test {
         cpu.run();
 
         assert_eq!(cpu.pull_stack(), cpu.status);
+    }
+
+    #[test]
+    fn test_pla_implied() {
+        let mut cpu = CPU::new();
+        cpu.load(vec![0x68]);
+        cpu.reset();
+
+        cpu.push_stack(0b1000_0000);
+        cpu.run();
+
+        assert_eq!(cpu.register_a, 0b1000_0000);
+        assert_eq!(cpu.status, status_flag::NEGATIVE);
     }
 
     #[test]
